@@ -1,5 +1,7 @@
 //! Awaz 1.0.0 — system-wide voice dictation (Windows + Linux).
 //! Ctrl+Shift+F / Numpad Enter -> mic -> Gemini 3.5 Transcribe -> focused app me paste.
+#![windows_subsystem = "windows"] // Windows pe console window na dikhe
+
 mod api;
 mod audio;
 mod autostart;
