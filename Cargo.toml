@@ -1,0 +1,39 @@
+[package]
+name = "awaz"
+version = "1.0.0"
+edition = "2024"
+description = "Awaz — system-wide voice dictation powered by Gemini 3.5 Transcribe (Windows + Linux)"
+license = "MIT"
+
+[[bin]]
+name = "awaz"
+path = "src/main.rs"
+
+[dependencies]
+# UI
+eframe = "0.37"
+egui = "0.37"
+# system integration
+global-hotkey = "0.8"
+arboard = "3"
+enigo = "0.6"
+# audio
+cpal = "0.18"
+hound = "3"
+# http + json
+reqwest = { version = "0.12", features = ["blocking", "json", "multipart", "rustls-tls"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+dirs = "5"
+
+[target.'cfg(windows)'.dependencies]
+tray-icon = "0.26"
+winreg = "0.55"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# ksni = pure-Rust tray (StatusNotifier), GTK system libs nahi chahiye
+tray-icon = { version = "0.26", default-features = false, features = ["ksni"] }
+
+[profile.release]
+opt-level = 2
+codegen-units = 16

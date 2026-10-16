@@ -1,0 +1,41 @@
+//! Global hotkeys: Ctrl+Shift+F + Numpad Enter.
+use global_hotkey::{
+    GlobalHotKeyEvent,
+    hotkey::{Code, HotKey, Modifiers},
+    GlobalHotKeyManager,
+};
+
+pub struct Hotkeys {
+    _manager: GlobalHotKeyManager, // zinda rakhna zaroori hai
+    pub toggle_id: u32,
+    pub numpad_id: u32,
+}
+
+impl Hotkeys {
+    pub fn new() -> Result<Self, String> {
+        let manager =
+            GlobalHotKeyManager::new().map_err(|e| format!("hotkey manager: {e}"))?;
+        let toggle = HotKey::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyF);
+        let numpad = HotKey::new(None, Code::NumpadEnter);
+        manager
+            .register(toggle)
+            .map_err(|e| format!("hotkey register (ctrl+shift+f): {e}"))?;
+        manager
+            .register(numpad)
+            .map_err(|e| format!("hotkey register (numpad enter): {e}"))?;
+        Ok(Self {
+            toggle_id: toggle.id(),
+            numpad_id: numpad.id(),
+            _manager: manager,
+        })
+    }
+
+    /// Dabi hui hotkey ids wapas (khali = kuch nahi daba).
+    pub fn poll(&self) -> Vec<u32> {
+        let mut ids = Vec::new();
+        while let Ok(ev) = GlobalHotKeyEvent::receiver().try_recv() {
+            ids.push(ev.id);
+        }
+        ids
+    }
+}
