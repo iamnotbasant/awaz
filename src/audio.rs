@@ -22,6 +22,12 @@ impl Recorder {
         let rate = config.sample_rate();
         let fmt = config.sample_format();
 
+        let dev_name = device
+            .description()
+            .map(|d| d.name().to_string())
+            .unwrap_or_else(|_| "?".to_string());
+        crate::log(&format!("mic: {dev_name} {rate}Hz {channels}ch"));
+
         let samples = Arc::new(Mutex::new(Vec::<f32>::new()));
         let level = Arc::new(Mutex::new(0f32));
 

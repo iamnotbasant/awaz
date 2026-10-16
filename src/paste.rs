@@ -8,6 +8,7 @@ pub fn paste_text(text: &str) -> Result<(), String> {
     let old = cb.get_text().ok();
     cb.set_text(text)
         .map_err(|e| format!("clipboard set: {e}"))?;
+    crate::log("paste: clipboard set ok");
     std::thread::sleep(Duration::from_millis(150));
 
     let mut enigo =
@@ -15,17 +16,24 @@ pub fn paste_text(text: &str) -> Result<(), String> {
     enigo
         .key(Key::Control, Direction::Press)
         .map_err(|e| format!("ctrl down: {e:?}"))?;
+    #[cfg(windows)]
+    enigo
+        .key(Key::V, Direction::Click)
+        .map_err(|e| format!("v: {e:?}"))?;
+    #[cfg(not(windows))]
     enigo
         .key(Key::Unicode('v'), Direction::Click)
         .map_err(|e| format!("v: {e:?}"))?;
     enigo
         .key(Key::Control, Direction::Release)
         .map_err(|e| format!("ctrl up: {e:?}"))?;
+    crate::log("paste: ctrl+v sent");
 
     // clipboard restore + X11 ke liye thoda hold
     std::thread::sleep(Duration::from_millis(300));
     if let Some(old) = old {
         let _ = cb.set_text(old);
+        crate::log("paste: clipboard restored");
     }
     std::thread::sleep(Duration::from_millis(200));
     Ok(())

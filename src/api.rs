@@ -8,11 +8,30 @@ const API_BASE: &str = "https://generativelanguage.googleapis.com/v1beta";
 const UPLOAD_URL: &str = "https://generativelanguage.googleapis.com/upload/v1beta/files";
 const MODEL: &str = "gemini-3.5-transcribe";
 
-fn client() -> Client {
+fn client_with_timeout(secs: u64) -> Client {
     Client::builder()
-        .timeout(Duration::from_secs(300))
+        .timeout(Duration::from_secs(secs))
         .build()
         .expect("http client")
+}
+
+fn client() -> Client {
+    client_with_timeout(300)
+}
+
+pub fn validate_key(api_key: &str) -> Result<(), String> {
+    let resp = client_with_timeout(20)
+        .get(format!("{API_BASE}/models"))
+        .header("x-goog-api-key", api_key)
+        .send()
+        .map_err(|e| format!("validate request: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().unwrap_or_default();
+        return Err(format!("Key check failed ({status}): {}", short(&body, 200)));
+    }
+    crate::log("validate: ok");
+    Ok(())
 }
 
 fn short(s: &str, n: usize) -> String {
@@ -79,15 +98,27 @@ pub fn transcribe_uri(
     file_uri: &str,
     mode: &str,
     language_codes: &[String],
+    dictionary: &[String],
 ) -> Result<String, String> {
+    let mut transcription_config = serde_json::json!({
+        "language_codes": language_codes,
+        "mode": {"type": mode}
+    });
+    if !dictionary.is_empty() {
+        transcription_config["prompt"] = serde_json::Value::String(format!(
+            "Transcribe exactly. Spell these names/words exactly as written: {}.",
+            dictionary.join(", ")
+        ));
+        crate::log(&format!(
+            "transcribe: dictionary prompt attached ({} words)",
+            dictionary.len()
+        ));
+    }
     let body = serde_json::json!({
         "model": MODEL,
         "input": [{"type": "audio", "uri": file_uri, "mime_type": "audio/wav"}],
         "generation_config": {
-            "transcription_config": {
-                "language_codes": language_codes,
-                "mode": {"type": mode}
-            }
+            "transcription_config": transcription_config
         }
     });
     let resp = client()
@@ -132,12 +163,13 @@ pub fn transcribe_audio(
     wav: &[u8],
     mode: &str,
     language_codes: &[String],
+    dictionary: &[String],
 ) -> Result<String, String> {
     if wav.len() > 20 * 1024 * 1024 {
         return Err("recording bahut lambi hai (20MB+)".into());
     }
     let (name, uri) = upload_audio(api_key, wav)?;
-    let r = transcribe_uri(api_key, &uri, mode, language_codes);
+    let r = transcribe_uri(api_key, &uri, mode, language_codes, dictionary);
     delete_file(api_key, &name);
     let text = r?;
     if text.is_empty() {
@@ -163,7 +195,7 @@ mod tests {
         let key = std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY env needed");
         let wav = std::fs::read("/tmp/rambler-test/speech.wav").expect("speech.wav missing");
         let text =
-            transcribe_audio(&key, &wav, "smart", &["en-US".to_string()]).expect("transcribe failed");
+            transcribe_audio(&key, &wav, "smart", &["en-US".to_string()], &[]).expect("transcribe failed");
         println!("TRANSCRIPT: {text}");
         assert!(
             text.to_lowercase().contains("rambler"),

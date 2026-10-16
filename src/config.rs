@@ -1,7 +1,7 @@
 //! Config load/save + purane Python version se migration.
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -9,6 +9,10 @@ pub struct Config {
     pub mode: String, // "smart" | "verbatim"
     pub language_codes: Vec<String>,
     pub autostart: bool,
+    #[serde(default)]
+    pub hold_to_talk: bool,
+    #[serde(default)]
+    pub dictionary: Vec<String>,
 }
 
 impl Default for Config {
@@ -18,6 +22,8 @@ impl Default for Config {
             mode: "smart".to_string(),
             language_codes: vec!["hi-IN".to_string(), "en-IN".to_string()],
             autostart: false,
+            hold_to_talk: false,
+            dictionary: Vec::new(),
         }
     }
 }
@@ -37,7 +43,8 @@ pub fn load() -> Config {
     }
     if cfg.api_key.is_empty() {
         // purane Python version (rambler-windows-v*) ke folder se key utha lao
-        if let Some(old) = find_old_python_config() {
+        if let Some((old_dir, old)) = find_old_python_config() {
+            crate::log(&format!("migration: found old key: {}", old_dir.display()));
             cfg.api_key = old.api_key;
             if !old.mode.is_empty() {
                 cfg.mode = old.mode;
@@ -47,6 +54,8 @@ pub fn load() -> Config {
             }
             cfg.autostart = old.autostart;
             save(&cfg);
+        } else {
+            crate::log("migration: no old key found");
         }
     }
     cfg
@@ -74,10 +83,9 @@ struct OldPyConfig {
     autostart: bool,
 }
 
-/// Purane `rambler-windows-v*` folders me newest config.json dhoondo.
-fn find_old_python_config() -> Option<OldPyConfig> {
+/// Purane `rambler-windows-v*` folders me newest config.json dhoondo (3 levels deep).
+fn find_old_python_config() -> Option<(PathBuf, OldPyConfig)> {
     let home = dirs::home_dir()?;
-    // likely jagah: home, Downloads, Desktop, Documents (2 level tak)
     let mut roots = vec![home.clone()];
     for d in ["Downloads", "Desktop", "Documents"] {
         let p = home.join(d);
@@ -85,26 +93,55 @@ fn find_old_python_config() -> Option<OldPyConfig> {
             roots.push(p);
         }
     }
-    let mut best: Option<(std::time::SystemTime, OldPyConfig)> = None;
-    for root in roots {
-        let entries = fs::read_dir(&root).ok()?;
-        for e in entries.flatten() {
-            let name = e.file_name().to_string_lossy().to_string();
-            if !name.starts_with("rambler-windows") {
+    let mut best: Option<(std::time::SystemTime, PathBuf, OldPyConfig)> = None;
+
+    fn scan(
+        dir: &Path,
+        depth: usize,
+        best: &mut Option<(std::time::SystemTime, PathBuf, OldPyConfig)>,
+    ) {
+        if depth > 3 {
+            return;
+        }
+        let entries = match fs::read_dir(dir) {
+            Ok(e) => e,
+            Err(_) => return,
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
                 continue;
             }
-            let cfg_path = e.path().join("config.json");
-            let meta = fs::metadata(&cfg_path).ok()?;
-            let mtime = meta.modified().ok()?;
-            let data = fs::read_to_string(&cfg_path).ok()?;
-            if let Ok(old) = serde_json::from_str::<OldPyConfig>(&data) {
-                if !old.api_key.is_empty()
-                    && best.as_ref().map(|(t, _)| *t < mtime).unwrap_or(true)
-                {
-                    best = Some((mtime, old));
+            let name = entry.file_name().to_string_lossy().to_lowercase();
+            if name.starts_with("rambler-windows") {
+                let cfg_path = path.join("config.json");
+                if let Ok(meta) = fs::metadata(&cfg_path) {
+                    if let Ok(mtime) = meta.modified() {
+                        if let Ok(data) = fs::read_to_string(&cfg_path) {
+                            if let Ok(old) = serde_json::from_str::<OldPyConfig>(&data) {
+                                if !old.api_key.trim().is_empty() {
+                                    let newer = match best {
+                                        Some((t, _, _)) => *t < mtime,
+                                        None => true,
+                                    };
+                                    if newer {
+                                        *best = Some((mtime, path.clone(), old));
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
+            }
+            if depth < 3 {
+                scan(&path, depth + 1, best);
             }
         }
     }
-    best.map(|(_, cfg)| cfg)
+
+    for root in roots {
+        scan(&root, 1, &mut best);
+    }
+
+    best.map(|(_, path, cfg)| (path, cfg))
 }

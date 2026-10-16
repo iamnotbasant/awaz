@@ -10,6 +10,8 @@ pub enum AppEvent {
     Quit,
     ToggleMode,
     ToggleAutostart,
+    ToggleHold,
+    ShowHistory,
 }
 
 pub fn spawn_tray(app_tx: Sender<AppEvent>) {
@@ -17,9 +19,12 @@ pub fn spawn_tray(app_tx: Sender<AppEvent>) {
         let menu = Menu::new();
         let mode_item = MenuItem::new("Mode badlo (Smart / Verbatim)", true, None);
         let auto_item = MenuItem::new("Auto-start on/off", true, None);
+        let hold_item = MenuItem::new("Hold-to-talk on/off", true, None);
+        let history_item = MenuItem::new("History dekho", true, None);
         let quit_item = MenuItem::new("Band karo", true, None);
-        if let Err(e) = menu.append_items(&[&mode_item, &auto_item, &quit_item]) {
+        if let Err(e) = menu.append_items(&[&mode_item, &auto_item, &hold_item, &history_item, &quit_item]) {
             eprintln!("tray menu: {e}");
+            crate::log(&format!("tray menu: {e}"));
             return;
         }
         let icon = make_icon();
@@ -29,9 +34,13 @@ pub fn spawn_tray(app_tx: Sender<AppEvent>) {
             .with_icon(icon)
             .build()
         {
-            Ok(t) => t,
+            Ok(t) => {
+                crate::log("tray: ready");
+                t
+            }
             Err(e) => {
                 eprintln!("tray build: {e}");
+                crate::log(&format!("tray build: {e}"));
                 return;
             }
         };
@@ -44,6 +53,10 @@ pub fn spawn_tray(app_tx: Sender<AppEvent>) {
                     let _ = app_tx.send(AppEvent::ToggleMode);
                 } else if ev.id == *auto_item.id() {
                     let _ = app_tx.send(AppEvent::ToggleAutostart);
+                } else if ev.id == *hold_item.id() {
+                    let _ = app_tx.send(AppEvent::ToggleHold);
+                } else if ev.id == *history_item.id() {
+                    let _ = app_tx.send(AppEvent::ShowHistory);
                 }
             }
             std::thread::sleep(std::time::Duration::from_millis(120));

@@ -18,7 +18,7 @@ jobs:
       - name: Upload EXE
         uses: actions/upload-artifact@v4
         with:
-          name: awaz-windows-1.0.0
+          name: awaz-windows-1.0.3
           path: target/release/awaz.exe
 
   build-linux:
@@ -39,5 +39,5 @@ jobs:
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
-          name: awaz-linux-1.0.0
+          name: awaz-linux-1.0.3
           path: target/release/awaz

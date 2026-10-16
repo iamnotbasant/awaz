@@ -1,11 +1,12 @@
-//! Awaz 1.0.0 — system-wide voice dictation (Windows + Linux).
-//! Ctrl+Shift+F / Numpad Enter -> mic -> Gemini 3.5 Transcribe -> focused app me paste.
+//! Awaz 1.0.3 — system-wide voice dictation (Windows + Linux).
+//! Ctrl+D / Numpad Enter -> mic -> Gemini 3.5 Transcribe -> focused app me paste.
 #![windows_subsystem = "windows"] // Windows pe console window na dikhe
 
 mod api;
 mod audio;
 mod autostart;
 mod config;
+mod history;
 mod hotkey;
 mod paste;
 mod tray;
@@ -25,7 +26,7 @@ const YELLOW: egui::Color32 = egui::Color32::from_rgb(0xfb, 0xbc, 0x04);
 const GREEN: egui::Color32 = egui::Color32::from_rgb(0x34, 0xa8, 0x53);
 
 // ---------- logging ----------
-fn log(msg: &str) {
+pub(crate) fn log(msg: &str) {
     let secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -50,17 +51,24 @@ fn log(msg: &str) {
 #[derive(PartialEq, Clone, Copy)]
 enum Phase {
     Setup,
+    Validating,
+    Ready,
     Idle,
     Listening,
     Working,
     Done,
     Error,
+    #[allow(dead_code)]
     Info,
+    History,
+    Cancelled,
 }
 
 enum WorkerMsg {
     Done(String),
     Error(String),
+    KeyOk,
+    KeyErr(String),
 }
 
 struct AwazApp {
@@ -77,6 +85,12 @@ struct AwazApp {
     worker_rx: mpsc::Receiver<WorkerMsg>,
     app_rx: mpsc::Receiver<tray::AppEvent>,
     api_key_input: String,
+    setup_error: String,
+    pending_key: String,
+    history_entries: Vec<history::Entry>,
+    history_query: String,
+    dict_input: String,
+    cancelled: Option<(Vec<i16>, Instant)>,
 }
 
 impl AwazApp {
@@ -95,6 +109,7 @@ impl AwazApp {
         };
 
         let (phase, status, sub) = if cfg.api_key.is_empty() {
+            log("startup: no api key, showing setup");
             cc.egui_ctx
                 .send_viewport_cmd(egui::ViewportCommand::Visible(true));
             (
@@ -103,15 +118,16 @@ impl AwazApp {
                 "API key chahiye".to_string(),
             )
         } else {
+            log("startup: api key present");
             cc.egui_ctx
                 .send_viewport_cmd(egui::ViewportCommand::Visible(true));
             (
-                Phase::Info,
+                Phase::Ready,
                 "Awaz ready hai!".to_string(),
-                "Ctrl+Shift+F ya Numpad Enter dabao".to_string(),
+                "Ctrl+D dabao — mai sun raha hun".to_string(),
             )
         };
-        log("Awaz 1.0.0 started");
+        log("Awaz 1.0.3 started");
 
         Self {
             cfg,
@@ -127,6 +143,12 @@ impl AwazApp {
             worker_rx,
             app_rx,
             api_key_input: String::new(),
+            setup_error: String::new(),
+            pending_key: String::new(),
+            history_entries: history::load(),
+            history_query: String::new(),
+            dict_input: String::new(),
+            cancelled: None,
         }
     }
 
@@ -147,9 +169,12 @@ impl AwazApp {
     // ---------- recording ----------
     fn toggle(&mut self, ctx: &egui::Context) {
         match self.phase {
-            Phase::Idle => self.start_listening(ctx),
+            Phase::Idle | Phase::Ready => self.start_listening(ctx),
             Phase::Listening => self.stop_listening(ctx),
-            Phase::Done | Phase::Error | Phase::Info => {
+            Phase::Done | Phase::Error | Phase::Info | Phase::History | Phase::Cancelled => {
+                if self.cancelled.take().is_some() {
+                    log("cancelled audio discarded");
+                }
                 self.hide(ctx);
                 self.phase = Phase::Idle;
             }
@@ -175,24 +200,19 @@ impl AwazApp {
         }
     }
 
-    fn stop_listening(&mut self, ctx: &egui::Context) {
-        let rec = match self.recorder.take() {
-            Some(r) => r,
-            None => return,
-        };
-        let samples = rec.stop();
-        if samples.is_empty() {
-            self.hide(ctx);
-            self.phase = Phase::Idle;
-            return;
-        }
-        self.set_phase(Phase::Working, "Samajh raha hun...", "Gemini sun raha hai");
+    fn transcribe_samples(&self, ctx: &egui::Context, samples: Vec<i16>) {
         let wav = audio::to_wav(&samples);
         let cfg = self.cfg.clone();
         let tx = self.worker_tx.clone();
         let egui_ctx = ctx.clone();
         std::thread::spawn(move || {
-            let result = api::transcribe_audio(&cfg.api_key, &wav, &cfg.mode, &cfg.language_codes);
+            let result = api::transcribe_audio(
+                &cfg.api_key,
+                &wav,
+                &cfg.mode,
+                &cfg.language_codes,
+                &cfg.dictionary,
+            );
             match result {
                 Ok(text) => {
                     if let Err(e) = paste::paste_text(&text) {
@@ -210,12 +230,42 @@ impl AwazApp {
         log("transcribe worker started");
     }
 
+    fn stop_listening(&mut self, ctx: &egui::Context) {
+        let rec = match self.recorder.take() {
+            Some(r) => r,
+            None => return,
+        };
+        let samples = rec.stop();
+        if samples.is_empty() {
+            self.hide(ctx);
+            self.phase = Phase::Idle;
+            return;
+        }
+        self.set_phase(Phase::Working, "Samajh raha hun...", "Gemini sun raha hai");
+        self.transcribe_samples(ctx, samples);
+    }
+
     fn cancel_listening(&mut self, ctx: &egui::Context) {
-        drop(self.recorder.take());
+        let samples = self
+            .recorder
+            .take()
+            .map(|rec| rec.stop())
+            .unwrap_or_default();
         self.levels.clear();
-        self.hide(ctx);
-        self.phase = Phase::Idle;
-        log("listening cancelled");
+        if samples.is_empty() {
+            self.hide(ctx);
+            self.phase = Phase::Idle;
+            return;
+        } else {
+            self.cancelled = Some((samples, Instant::now()));
+            self.set_phase(
+                Phase::Cancelled,
+                "Recording cancel ho gayi",
+                "Undo dabao — 10 second me wapas lao",
+            );
+            self.show(ctx);
+            log("listening cancelled (undo available 10s)");
+        }
     }
 
     // ---------- per-frame ----------
@@ -246,25 +296,51 @@ impl AwazApp {
                     }
                     config::save(&self.cfg);
                 }
+                tray::AppEvent::ToggleHold => {
+                    self.cfg.hold_to_talk = !self.cfg.hold_to_talk;
+                    config::save(&self.cfg);
+                    log(&format!("hold_to_talk -> {}", self.cfg.hold_to_talk));
+                }
+                tray::AppEvent::ShowHistory => {
+                    self.history_entries = history::load();
+                    self.history_query.clear();
+                    self.dict_input = self.cfg.dictionary.join(", ");
+                    self.set_phase(Phase::History, "History", "purani dictations");
+                    self.show(&ctx);
+                    log("history: opened");
+                }
             }
         }
 
-        // hotkeys (pehle ids nikalo, borrow khatam, phir toggle)
-        let hotkey_hit = if let Some(hk) = &self.hotkeys {
-            let ids = hk.poll();
-            ids.iter()
-                .any(|id| *id == hk.toggle_id || *id == hk.numpad_id)
-        } else {
-            false
-        };
-        if hotkey_hit {
-            self.toggle(&ctx);
+        // hotkeys (pehle events nikalo, borrow khatam, phir toggle)
+        let hk_data: Option<(u32, u32, Vec<(u32, bool)>)> = self
+            .hotkeys
+            .as_ref()
+            .map(|hk| (hk.toggle_id, hk.numpad_id, hk.poll()));
+        if let Some((tid, nid, events)) = hk_data {
+            for (id, pressed) in events {
+                let hit = id == tid || id == nid;
+                if !hit {
+                    continue;
+                }
+                if self.cfg.hold_to_talk {
+                    if pressed && (self.phase == Phase::Idle || self.phase == Phase::Ready) {
+                        self.start_listening(&ctx);
+                    } else if !pressed && self.phase == Phase::Listening {
+                        self.stop_listening(&ctx);
+                    }
+                } else if pressed {
+                    self.toggle(&ctx);
+                }
+            }
         }
 
         // worker results
         while let Ok(msg) = self.worker_rx.try_recv() {
             match msg {
                 WorkerMsg::Done(text) => {
+                    history::push(&text);
+                    self.history_entries = history::load();
                     let preview: String = text.chars().take(90).collect();
                     self.set_phase(
                         Phase::Done,
@@ -275,6 +351,25 @@ impl AwazApp {
                 }
                 WorkerMsg::Error(e) => {
                     self.set_phase(Phase::Error, "Kuch gadbad hui", &e);
+                    self.show(&ctx);
+                }
+                WorkerMsg::KeyOk => {
+                    self.cfg.api_key = self.pending_key.clone();
+                    config::save(&self.cfg);
+                    self.pending_key.clear();
+                    log("setup: key valid, saved");
+                    self.set_phase(
+                        Phase::Ready,
+                        "Awaz ready hai!",
+                        "Ctrl+D dabao — mai sun raha hun",
+                    );
+                    self.show(&ctx);
+                    log("setup: ready popup shown");
+                }
+                WorkerMsg::KeyErr(e) => {
+                    log(&format!("setup: key validation failed: {e}"));
+                    self.setup_error = format!("Key me gadbad: {e}");
+                    self.set_phase(Phase::Setup, "Awaz setup", "API key chahiye");
                     self.show(&ctx);
                 }
             }
@@ -294,6 +389,12 @@ impl AwazApp {
                 self.hide(&ctx);
                 self.phase = Phase::Idle;
             }
+            Phase::Cancelled if self.phase_at.elapsed() > Duration::from_secs(10) => {
+                self.cancelled = None;
+                log("cancelled audio discarded");
+                self.hide(&ctx);
+                self.phase = Phase::Idle;
+            }
             _ => {}
         }
 
@@ -306,8 +407,10 @@ impl AwazApp {
                 }
             }
             ctx.request_repaint_after(Duration::from_millis(33));
-        } else if self.phase == Phase::Working {
+        } else if self.phase == Phase::Working || self.phase == Phase::Validating {
             ctx.request_repaint_after(Duration::from_millis(60));
+        } else if self.phase == Phase::Cancelled {
+            ctx.request_repaint_after(Duration::from_millis(500));
         }
 
         // render
@@ -319,6 +422,8 @@ impl AwazApp {
                     .rect_filled(rect, egui::CornerRadius::same(18), bg());
                 if self.phase == Phase::Setup {
                     self.render_setup(ui, &ctx);
+                } else if self.phase == Phase::History {
+                    self.render_history(ui, &ctx);
                 } else {
                     self.render_popup(ui, &ctx);
                 }
@@ -344,6 +449,14 @@ impl AwazApp {
                     .size(11.0)
                     .color(DIM),
             );
+            if !self.setup_error.is_empty() {
+                ui.add_space(4.0);
+                ui.label(
+                    egui::RichText::new(&self.setup_error)
+                        .size(12.0)
+                        .color(RED),
+                );
+            }
             ui.add_space(6.0);
             let resp = ui.add(
                 egui::TextEdit::singleline(&mut self.api_key_input)
@@ -351,28 +464,44 @@ impl AwazApp {
                     .desired_width(320.0)
                     .hint_text("API key yahan paste karo"),
             );
-            let enter = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            let enter = resp.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
             ui.add_space(6.0);
-            if ui
+            let save_btn = ui
                 .add(
                     egui::Button::new(
                         egui::RichText::new("Save aur shuru karo").strong().color(WHITE),
                     )
                     .fill(GREEN),
-                )
-                .clicked()
-                || enter
-            {
+                );
+            if save_btn.clicked() || enter {
                 let k = self.api_key_input.trim().to_string();
-                if !k.is_empty() {
-                    self.cfg.api_key = k;
-                    config::save(&self.cfg);
-                    log("api key saved");
+                if k.is_empty() {
+                    self.setup_error = "Key khaali hai — pehle key paste karo".to_string();
+                } else {
+                    self.setup_error.clear();
+                    self.pending_key = k.clone();
                     self.set_phase(
-                        Phase::Info,
-                        "Awaz ready hai!",
-                        "Ctrl+Shift+F ya Numpad Enter dabao",
+                        Phase::Validating,
+                        "Key check ho rahi hai...",
+                        "thoda ruko",
                     );
+                    self.show(ctx);
+                    log("setup: save clicked");
+                    log(&format!("setup: validating key (len: {})", k.len()));
+
+                    let tx = self.worker_tx.clone();
+                    let egui_ctx = ctx.clone();
+                    std::thread::spawn(move || {
+                        match api::validate_key(&k) {
+                            Ok(()) => {
+                                let _ = tx.send(WorkerMsg::KeyOk);
+                            }
+                            Err(e) => {
+                                let _ = tx.send(WorkerMsg::KeyErr(e));
+                            }
+                        }
+                        egui_ctx.request_repaint();
+                    });
                 }
             }
             ui.add_space(4.0);
@@ -382,7 +511,6 @@ impl AwazApp {
                     .color(DIM),
             );
         });
-        let _ = ctx;
     }
 
     fn render_popup(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
@@ -401,8 +529,33 @@ impl AwazApp {
                     if self.phase == Phase::Listening {
                         self.cancel_listening(ctx);
                     } else {
+                        if self.phase == Phase::Cancelled {
+                            self.cancelled = None;
+                            log("cancelled audio discarded");
+                        }
                         self.hide(ctx);
                         self.phase = Phase::Idle;
+                    }
+                }
+                if self.phase == Phase::Cancelled {
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                egui::RichText::new("Undo").strong().color(WHITE),
+                            )
+                            .fill(GREEN),
+                        )
+                        .clicked()
+                    {
+                        if let Some((samples, _)) = self.cancelled.take() {
+                            self.set_phase(
+                                Phase::Working,
+                                "Samajh raha hun...",
+                                "Gemini sun raha hai",
+                            );
+                            self.transcribe_samples(ctx, samples);
+                            log("undo: re-transcribing cancelled audio");
+                        }
                     }
                 }
             });
@@ -437,11 +590,114 @@ impl AwazApp {
             });
         });
 
+        let hint = if self.cfg.hold_to_talk {
+            "Dabaye rakho = bolo, chhodo = stop   |   X = band karo"
+        } else {
+            "Ctrl+D dobara = stop   |   X = band karo"
+        };
         ui.label(
-            egui::RichText::new("Hotkey dobara dabao = stop   |   X = band karo")
+            egui::RichText::new(hint)
                 .size(9.0)
                 .color(DIM),
         );
+    }
+
+    fn render_history(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        ui.horizontal(|ui| {
+            ui.label(
+                egui::RichText::new("History")
+                    .size(15.0)
+                    .strong()
+                    .color(WHITE),
+            );
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
+                if ui
+                    .button(egui::RichText::new("X").strong().color(DIM))
+                    .clicked()
+                {
+                    self.hide(ctx);
+                    self.phase = Phase::Idle;
+                }
+            });
+        });
+
+        ui.add(
+            egui::TextEdit::singleline(&mut self.history_query)
+                .desired_width(ui.available_width())
+                .hint_text("Khojo..."),
+        );
+
+        let results = history::search(&self.history_entries, &self.history_query);
+        egui::ScrollArea::vertical()
+            .max_height(45.0)
+            .show(ui, |ui| {
+                if results.is_empty() {
+                    ui.label(
+                        egui::RichText::new("Abhi kuch nahi bola")
+                            .size(11.0)
+                            .color(DIM),
+                    );
+                } else {
+                    for entry in results {
+                        let time_str = rel_time(entry.ts);
+                        let preview: String = entry.text.chars().take(60).collect();
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                egui::RichText::new(&time_str)
+                                    .size(10.0)
+                                    .color(DIM),
+                            );
+                            if ui
+                                .button(
+                                    egui::RichText::new(&preview)
+                                        .size(11.0)
+                                        .color(WHITE),
+                                )
+                                .clicked()
+                            {
+                                if let Ok(mut cb) = arboard::Clipboard::new() {
+                                    let _ = cb.set_text(&entry.text);
+                                }
+                                log("history: copied to clipboard");
+                            }
+                        });
+                    }
+                }
+            });
+
+        ui.separator();
+        ui.label(
+            egui::RichText::new("Shabd-kosh (dictionary)")
+                .size(10.0)
+                .strong()
+                .color(WHITE),
+        );
+        ui.horizontal(|ui| {
+            ui.add(
+                egui::TextEdit::singleline(&mut self.dict_input)
+                    .desired_width(ui.available_width() - 55.0)
+                    .hint_text("naam, shabd — comma se alag likho"),
+            );
+            if ui
+                .button(egui::RichText::new("Save").strong().color(WHITE))
+                .clicked()
+            {
+                let mut seen = std::collections::HashSet::new();
+                let mut words = Vec::new();
+                for word in self.dict_input.split(',') {
+                    let w = word.trim().to_string();
+                    if !w.is_empty() && seen.insert(w.clone()) {
+                        words.push(w);
+                    }
+                }
+                self.cfg.dictionary = words;
+                config::save(&self.cfg);
+                log(&format!(
+                    "dictionary saved ({} words)",
+                    self.cfg.dictionary.len()
+                ));
+            }
+        });
     }
 
     fn paint_waveform(&self, painter: egui::Painter, rect: egui::Rect) {
@@ -450,17 +706,17 @@ impl AwazApp {
         let bw = (rect.width() - gap * (n as f32 - 1.0)) / n as f32;
         let color = match self.phase {
             Phase::Listening => RED,
-            Phase::Working => YELLOW,
+            Phase::Working | Phase::Validating => YELLOW,
             Phase::Done => GREEN,
-            Phase::Error => RED,
+            Phase::Error | Phase::Cancelled => RED,
             _ => DIM,
         };
         let t = self.phase_at.elapsed().as_secs_f32();
         for i in 0..n {
             let v = match self.phase {
                 Phase::Listening => *self.levels.iter().nth(i).unwrap_or(&0.0),
-                Phase::Working => 0.35 + 0.3 * (t * 6.0 + i as f32 * 0.55).sin().abs(),
-                Phase::Done | Phase::Error => 0.15,
+                Phase::Working | Phase::Validating => 0.35 + 0.3 * (t * 6.0 + i as f32 * 0.55).sin().abs(),
+                Phase::Done | Phase::Error | Phase::Cancelled => 0.15,
                 _ => 0.05,
             };
             let h = (v.clamp(0.02, 1.0) * rect.height()).max(3.0);
@@ -486,6 +742,23 @@ impl AwazApp {
     }
 }
 
+fn rel_time(ts: u64) -> String {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let diff = now.saturating_sub(ts);
+    if diff < 60 {
+        "abhi".to_string()
+    } else if diff < 3600 {
+        format!("{}m pehle", diff / 60)
+    } else if diff < 86400 {
+        format!("{}h pehle", diff / 3600)
+    } else {
+        format!("{}d pehle", diff / 86400)
+    }
+}
+
 impl eframe::App for AwazApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.frame(ui);
@@ -497,6 +770,7 @@ impl eframe::App for AwazApp {
 }
 
 fn main() {
+    std::panic::set_hook(Box::new(|info| log(&format!("PANIC: {info}"))));
     let opts = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_decorations(false)

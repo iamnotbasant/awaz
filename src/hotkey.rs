@@ -1,6 +1,7 @@
-//! Global hotkeys: Ctrl+Shift+F + Numpad Enter.
+//! Global hotkeys: Ctrl+D + Numpad Enter.
 use global_hotkey::{
     GlobalHotKeyEvent,
+    HotKeyState,
     hotkey::{Code, HotKey, Modifiers},
     GlobalHotKeyManager,
 };
@@ -13,16 +14,25 @@ pub struct Hotkeys {
 
 impl Hotkeys {
     pub fn new() -> Result<Self, String> {
-        let manager =
-            GlobalHotKeyManager::new().map_err(|e| format!("hotkey manager: {e}"))?;
-        let toggle = HotKey::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyF);
+        let manager = GlobalHotKeyManager::new().map_err(|e| {
+            let err = format!("hotkey manager: {e}");
+            crate::log(&err);
+            err
+        })?;
+        let toggle = HotKey::new(Some(Modifiers::CONTROL), Code::KeyD);
         let numpad = HotKey::new(None, Code::NumpadEnter);
-        manager
-            .register(toggle)
-            .map_err(|e| format!("hotkey register (ctrl+shift+f): {e}"))?;
-        manager
-            .register(numpad)
-            .map_err(|e| format!("hotkey register (numpad enter): {e}"))?;
+        manager.register(toggle).map_err(|e| {
+            let err = format!("hotkey register (ctrl+d): {e}");
+            crate::log(&err);
+            err
+        })?;
+        crate::log("hotkey registered: ctrl+d");
+        manager.register(numpad).map_err(|e| {
+            let err = format!("hotkey register (numpad enter): {e}");
+            crate::log(&err);
+            err
+        })?;
+        crate::log("hotkey registered: numpad-enter");
         Ok(Self {
             toggle_id: toggle.id(),
             numpad_id: numpad.id(),
@@ -30,12 +40,12 @@ impl Hotkeys {
         })
     }
 
-    /// Dabi hui hotkey ids wapas (khali = kuch nahi daba).
-    pub fn poll(&self) -> Vec<u32> {
-        let mut ids = Vec::new();
+    /// Hotkey events wapas: (id, is_pressed).
+    pub fn poll(&self) -> Vec<(u32, bool)> {
+        let mut events = Vec::new();
         while let Ok(ev) = GlobalHotKeyEvent::receiver().try_recv() {
-            ids.push(ev.id);
+            events.push((ev.id, ev.state == HotKeyState::Pressed));
         }
-        ids
+        events
     }
 }
