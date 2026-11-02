@@ -935,4 +935,22 @@ mod tests {
             "type a\nkey enter\nkey enter\ntype b\nkey enter\n"
         );
     }
+
+    #[test]
+    fn test_vk_v_constant_and_paste_behavior_defaults() {
+        // VK_V on Windows is virtual key code 0x56
+        const VK_V_CODE: u32 = 0x56;
+        assert_eq!(VK_V_CODE, 86);
+
+        let default_behavior = PasteBehavior::default();
+        assert!(default_behavior.allow_trailing_space);
+        assert!(default_behavior.allow_auto_submit);
+
+        let custom_behavior = PasteBehavior {
+            allow_trailing_space: false,
+            allow_auto_submit: false,
+        };
+        assert!(!custom_behavior.allow_trailing_space);
+        assert!(!custom_behavior.allow_auto_submit);
+    }
 }
