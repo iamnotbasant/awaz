@@ -1969,10 +1969,61 @@ mod tests {
             let expected = matches!(provider.id.as_str(), "openai" | "groq" | "custom");
             assert_eq!(
                 provider.supports_translation, expected,
-                "{} claims the wrong translation capability",
+                "supports_translation mismatch for provider {}",
                 provider.id
             );
         }
+    }
+
+    #[test]
+    fn gemini_stt_resolution_and_missing_key_behavior() {
+        let mut settings = get_default_settings();
+        settings.stt_engine_mode = SttEngineMode::Cloud;
+        settings.cloud_stt_provider_id = "gemini".to_string();
+        // Without key: MissingApiKey error, safe and no crash
+        let err = resolve_cloud_stt(&settings).unwrap_err();
+        assert_eq!(err.reason, CloudSttUnavailableReason::MissingApiKey);
+        assert_eq!(err.provider_id.as_deref(), Some("gemini"));
+
+        // With key: resolves native Gemini kind and gemini-3.5-transcribe
+        settings
+            .cloud_stt_api_keys
+            .insert("gemini".to_string(), "test-gemini-key".to_string());
+        let cfg = resolve_cloud_stt(&settings).expect("gemini should resolve");
+        assert_eq!(cfg.provider.kind, CloudSttKind::Gemini);
+        assert_eq!(cfg.model, "gemini-3.5-transcribe");
+        assert_eq!(cfg.api_key, "test-gemini-key");
+    }
+
+    #[test]
+    fn groq_stt_resolution_and_missing_key_behavior() {
+        let mut settings = get_default_settings();
+        settings.stt_engine_mode = SttEngineMode::Cloud;
+        settings.cloud_stt_provider_id = "groq".to_string();
+        // Without key: MissingApiKey error, safe and no crash
+        let err = resolve_cloud_stt(&settings).unwrap_err();
+        assert_eq!(err.reason, CloudSttUnavailableReason::MissingApiKey);
+        assert_eq!(err.provider_id.as_deref(), Some("groq"));
+
+        // With key: resolves OpenAiCompatible kind and whisper-large-v3-turbo
+        settings
+            .cloud_stt_api_keys
+            .insert("groq".to_string(), "test-groq-key".to_string());
+        let cfg = resolve_cloud_stt(&settings).expect("groq should resolve");
+        assert_eq!(cfg.provider.kind, CloudSttKind::OpenAiCompatible);
+        assert_eq!(cfg.model, "whisper-large-v3-turbo");
+        assert_eq!(cfg.base_url, "https://api.groq.com/openai/v1");
+        assert_eq!(cfg.api_key, "test-groq-key");
+    }
+
+    #[test]
+    fn warmup_samples_and_mp3_encoding_shape() {
+        let samples = warmup_samples();
+        assert_eq!(samples.len(), (WHISPER_SAMPLE_RATE / 4) as usize); // 4000 samples = 0.25s
+        let mp3_bytes = encode_mp3_16k_mono(&samples).expect("mp3 encoding should succeed");
+        assert!(!mp3_bytes.is_empty());
+        // MP3 sync frame starts with 0xFF
+        assert_eq!(mp3_bytes[0], 0xFF);
     }
 
     #[test]
