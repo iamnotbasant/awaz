@@ -15,6 +15,8 @@ mod handler;
 pub mod handy_keys;
 mod tauri_impl;
 
+use std::collections::HashMap;
+
 use log::{debug, error, info, warn};
 use serde::Serialize;
 use specta::Type;
