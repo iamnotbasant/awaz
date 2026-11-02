@@ -1,0 +1,938 @@
+use crate::input::{self, EnigoState};
+#[cfg(target_os = "linux")]
+use crate::settings::TypingTool;
+use crate::settings::{get_settings, AutoSubmitKey, ClipboardHandling, PasteMethod};
+use enigo::{Direction, Enigo, Key, Keyboard};
+use log::{debug, info};
+use std::process::Command;
+use std::time::Duration;
+use tauri::{AppHandle, Manager};
+use tauri_plugin_clipboard_manager::ClipboardExt;
+
+#[cfg(target_os = "linux")]
+use crate::utils::{is_gnome_wayland, is_kde_wayland, is_wayland};
+
+/// Pastes text using the clipboard: saves current content, writes text, sends paste keystroke, restores clipboard.
+/// Put `text` on the system clipboard.
+///
+/// Shared by the paste pipeline and the live-transcription card's copy button.
+/// On Wayland this prefers `wl-copy`, which handles non-ASCII (umlauts and the
+/// like) more reliably than the plugin's own writer.
+pub fn write_clipboard_text(app_handle: &AppHandle, text: &str) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    if is_wayland() && is_wl_copy_available() {
+        info!("Using wl-copy for clipboard write on Wayland");
+        return write_clipboard_via_wl_copy(text);
+    }
+
+    app_handle
+        .clipboard()
+        .write_text(text)
+        .map_err(|e| format!("Failed to write to clipboard: {}", e))
+}
+
+/// Put text on the clipboard *for a moment*: the transcript a paste is about to
+/// deliver, and the user's own content put back straight after it.
+///
+/// On Windows an ordinary write lands in Win+V clipboard history and, with "Sync
+/// across your devices" on, in the user's Microsoft account. Every dictation
+/// therefore added two history entries (the transcript, then a duplicate of
+/// whatever was there before) and shipped the transcript off the machine, which
+/// is not something a local dictation app gets to do behind the user's back.
+/// The `CanIncludeInClipboardHistory` / `CanUploadToCloudClipboard` formats opt
+/// these writes out of both. Monitoring is deliberately left on: remote-desktop
+/// and VM clients watch the clipboard to forward it into the session, and the
+/// paste would land the session's stale clipboard instead.
+///
+/// Writes the user asks for (the copy buttons, "copy to clipboard" after a paste)
+/// go through [`write_clipboard_text`] and stay in history as usual.
+fn write_transient_clipboard_text(app_handle: &AppHandle, text: &str) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        use arboard::SetExtWindows;
+        match arboard::Clipboard::new().and_then(|mut clipboard| {
+            clipboard
+                .set()
+                .exclude_from_history()
+                .exclude_from_cloud()
+                .text(text)
+        }) {
+            Ok(()) => return Ok(()),
+            // Never fail a paste over the history opt-out: fall back to the
+            // ordinary write, which is what every earlier version did.
+            Err(e) => debug!("History-excluded clipboard write failed, retrying plainly: {e}"),
+        }
+    }
+    write_clipboard_text(app_handle, text)
+}
+
+/// A monotonic counter that changes whenever the clipboard's contents change.
+///
+/// This is what makes harvesting a text selection safe. A synthetic Ctrl+C that
+/// the target application ignores — because nothing was selected, or because it
+/// simply doesn't implement copy — leaves the clipboard untouched, and reading it
+/// anyway returns whatever the user copied minutes ago. That could be a password,
+/// and it would then be sent to whichever model provider the user has configured,
+/// possibly a cloud one. Comparing the counter before and after proves something
+/// actually landed.
+///
+/// `None` means the platform gives us no way to prove freshness, and the caller
+/// must treat a harvest as "cannot tell" rather than trusting the read. Only
+/// Windows has a real counter here; X11 doesn't need one because it can read the
+/// PRIMARY selection directly without a keystroke.
+pub fn clipboard_sequence() -> Option<u64> {
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::System::DataExchange::GetClipboardSequenceNumber;
+        Some(unsafe { GetClipboardSequenceNumber() } as u64)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        None
+    }
+}
+
+/// What the clipboard held before we interfered with it.
+///
+/// Deliberately richer than the `String` the paste path uses. `read_text()`
+/// collapses "empty", "holds an image", "holds files" and "read failed" into the
+/// same empty string, and writing that back is fine for a paste (which has
+/// already overwritten the clipboard regardless). A *harvest* inverts that: a
+/// user who copied an image, then selects some text and asks for a translation,
+/// would silently lose the image. So a non-text clipboard is recorded as
+/// something we must not overwrite at all.
+pub enum ClipboardSnapshot {
+    Text(String),
+    /// Held something that isn't text, or could not be read. Never restored,
+    /// because we cannot reproduce it — the harvest is skipped instead.
+    NotText,
+}
+
+/// Record the clipboard so a harvest can put it back.
+pub fn snapshot_clipboard(app_handle: &AppHandle) -> ClipboardSnapshot {
+    match app_handle.clipboard().read_text() {
+        Ok(text) => ClipboardSnapshot::Text(text),
+        // An image, a file list, or an empty clipboard. `read_text` cannot tell
+        // these apart, and only one of them is safe to clobber, so none are.
+        Err(_) => ClipboardSnapshot::NotText,
+    }
+}
+
+/// Put back what [`snapshot_clipboard`] recorded.
+pub fn restore_clipboard(app_handle: &AppHandle, snapshot: &ClipboardSnapshot) {
+    if let ClipboardSnapshot::Text(text) = snapshot {
+        if let Err(e) = write_transient_clipboard_text(app_handle, text) {
+            // Worth a real warning: the user's clipboard now holds the harvested
+            // selection instead of what they put there.
+            log::warn!("Could not restore the clipboard after a selection capture: {e}");
+        }
+    }
+}
+
+fn paste_via_clipboard(
+    enigo: &mut Enigo,
+    text: &str,
+    app_handle: &AppHandle,
+    paste_method: &PasteMethod,
+    paste_delay_ms: u64,
+) -> Result<(), String> {
+    let clipboard = app_handle.clipboard();
+    // Paste-and-restore used to save only text, so a clipboard holding a
+    // screenshot came back as an empty string: the image was silently destroyed
+    // by dictating. Save the image too, but only probe for one when there is no
+    // text to restore — reading an image decodes the full bitmap, so the common
+    // text path stays exactly as cheap as it was. Backport of Handy #1231.
+    let saved_text = clipboard.read_text().ok().filter(|t| !t.is_empty());
+    let saved_image = if saved_text.is_none() {
+        clipboard.read_image().ok().map(|image| image.to_owned())
+    } else {
+        None
+    };
+
+    // Write text to clipboard first
+    write_transient_clipboard_text(app_handle, text)?;
+
+    std::thread::sleep(Duration::from_millis(paste_delay_ms));
+
+    // Send the paste key combo. The result is held rather than returned with
+    // `?` so a failed keystroke still restores the user's clipboard below;
+    // returning early left the transcript on the clipboard and whatever the user
+    // had copied was gone (part of Handy #1756).
+    let send_result = (|| -> Result<(), String> {
+        #[cfg(target_os = "linux")]
+        let key_combo_sent = try_send_key_combo_linux(paste_method)?;
+
+        #[cfg(not(target_os = "linux"))]
+        let key_combo_sent = false;
+
+        // Fall back to enigo if no native tool handled it
+        if !key_combo_sent {
+            match paste_method {
+                PasteMethod::CtrlV => input::send_paste_ctrl_v(enigo)?,
+                PasteMethod::CtrlShiftV => input::send_paste_ctrl_shift_v(enigo)?,
+                PasteMethod::ShiftInsert => input::send_paste_shift_insert(enigo)?,
+                _ => return Err("Invalid paste method for clipboard paste".into()),
+            }
+        }
+        Ok(())
+    })();
+
+    std::thread::sleep(std::time::Duration::from_millis(50));
+
+    // Restore the original clipboard content. Text takes priority, so this path
+    // is identical to before; an image is restored only when the clipboard held
+    // no text at all, and an empty clipboard is cleared rather than left holding
+    // the transcript.
+    if let Some(clipboard_content) = saved_text {
+        // On Wayland, prefer wl-copy for better compatibility
+        #[cfg(target_os = "linux")]
+        if is_wayland() && is_wl_copy_available() {
+            let _ = write_clipboard_via_wl_copy(&clipboard_content);
+        } else {
+            let _ = clipboard.write_text(&clipboard_content);
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        let _ = write_transient_clipboard_text(app_handle, &clipboard_content);
+    } else if let Some(image) = saved_image {
+        debug!("Restoring image to clipboard");
+        if let Err(e) = clipboard.write_image(&image) {
+            log::warn!("Could not restore the clipboard image after pasting: {e}");
+        }
+    } else {
+        let _ = clipboard.clear();
+    }
+
+    send_result
+}
+
+/// Attempts to send a key combination using Linux-native tools.
+/// Returns `Ok(true)` if a native tool handled it, `Ok(false)` to fall back to enigo.
+#[cfg(target_os = "linux")]
+fn try_send_key_combo_linux(paste_method: &PasteMethod) -> Result<bool, String> {
+    if is_wayland() {
+        // Wayland: prefer wtype (but not on KDE or GNOME), then dotool, then ydotool.
+        // wtype needs the zwp_virtual_keyboard_manager_v1 protocol, which KWin
+        // and Mutter (GNOME) deliberately don't implement. On GNOME wtype was
+        // picked anyway, failed, and the `?` stopped the fallback, so every
+        // Ctrl+V / Ctrl+Shift+V / Shift+Insert paste failed there. dotool (the
+        // RemoteDesktop portal) and ydotool (uinput) work. Backport of Handy #1276.
+        if !is_kde_wayland() && !is_gnome_wayland() && is_wtype_available() {
+            info!("Using wtype for key combo");
+            send_key_combo_via_wtype(paste_method)?;
+            return Ok(true);
+        }
+        if is_dotool_available() {
+            info!("Using dotool for key combo");
+            send_key_combo_via_dotool(paste_method)?;
+            return Ok(true);
+        }
+        if is_ydotool_available() {
+            info!("Using ydotool for key combo");
+            send_key_combo_via_ydotool(paste_method)?;
+            return Ok(true);
+        }
+    } else {
+        // X11: prefer xdotool, then ydotool
+        if is_xdotool_available() {
+            info!("Using xdotool for key combo");
+            send_key_combo_via_xdotool(paste_method)?;
+            return Ok(true);
+        }
+        if is_ydotool_available() {
+            info!("Using ydotool for key combo");
+            send_key_combo_via_ydotool(paste_method)?;
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
+}
+
+/// Attempts to type text directly using Linux-native tools.
+/// Returns `Ok(true)` if a native tool handled it, `Ok(false)` to fall back to enigo.
+#[cfg(target_os = "linux")]
+fn try_direct_typing_linux(text: &str, preferred_tool: TypingTool) -> Result<bool, String> {
+    // If user specified a tool, try only that one
+    if preferred_tool != TypingTool::Auto {
+        return match preferred_tool {
+            TypingTool::Wtype if is_wtype_available() => {
+                info!("Using user-specified wtype");
+                type_text_via_wtype(text)?;
+                Ok(true)
+            }
+            TypingTool::Kwtype if is_kwtype_available() => {
+                info!("Using user-specified kwtype");
+                type_text_via_kwtype(text)?;
+                Ok(true)
+            }
+            TypingTool::Dotool if is_dotool_available() => {
+                info!("Using user-specified dotool");
+                type_text_via_dotool(text)?;
+                Ok(true)
+            }
+            TypingTool::Ydotool if is_ydotool_available() => {
+                info!("Using user-specified ydotool");
+                type_text_via_ydotool(text)?;
+                Ok(true)
+            }
+            TypingTool::Xdotool if is_xdotool_available() => {
+                info!("Using user-specified xdotool");
+                type_text_via_xdotool(text)?;
+                Ok(true)
+            }
+            _ => Err(format!(
+                "Typing tool {:?} is not available on this system",
+                preferred_tool
+            )),
+        };
+    }
+
+    // Auto mode - existing fallback chain
+    if is_wayland() {
+        // KDE Wayland: prefer kwtype (uses KDE Fake Input protocol, supports umlauts)
+        if is_kde_wayland() && is_kwtype_available() {
+            info!("Using kwtype for direct text input on KDE Wayland");
+            type_text_via_kwtype(text)?;
+            return Ok(true);
+        }
+        // Wayland: prefer wtype, then dotool, then ydotool
+        // Note: wtype doesn't work on KDE or GNOME (no zwp_virtual_keyboard_manager_v1
+        // support in KWin or Mutter) — see try_send_key_combo_linux.
+        if !is_kde_wayland() && !is_gnome_wayland() && is_wtype_available() {
+            info!("Using wtype for direct text input");
+            type_text_via_wtype(text)?;
+            return Ok(true);
+        }
+        if is_dotool_available() {
+            info!("Using dotool for direct text input");
+            type_text_via_dotool(text)?;
+            return Ok(true);
+        }
+        if is_ydotool_available() {
+            info!("Using ydotool for direct text input");
+            type_text_via_ydotool(text)?;
+            return Ok(true);
+        }
+    } else {
+        // X11: prefer xdotool, then ydotool
+        if is_xdotool_available() {
+            info!("Using xdotool for direct text input");
+            type_text_via_xdotool(text)?;
+            return Ok(true);
+        }
+        if is_ydotool_available() {
+            info!("Using ydotool for direct text input");
+            type_text_via_ydotool(text)?;
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
+}
+
+/// Returns the list of available typing tools on this system.
+/// Always includes "auto" as the first entry.
+#[cfg(target_os = "linux")]
+pub fn get_available_typing_tools() -> Vec<String> {
+    let mut tools = vec!["auto".to_string()];
+    if is_wtype_available() {
+        tools.push("wtype".to_string());
+    }
+    if is_kwtype_available() {
+        tools.push("kwtype".to_string());
+    }
+    if is_dotool_available() {
+        tools.push("dotool".to_string());
+    }
+    if is_ydotool_available() {
+        tools.push("ydotool".to_string());
+    }
+    if is_xdotool_available() {
+        tools.push("xdotool".to_string());
+    }
+    tools
+}
+
+/// Whether `program` is an executable file on `PATH`.
+///
+/// Searched in-process rather than by spawning `which`: not every distribution
+/// ships `which` (Arch's `base` group does not), and there every paste tool read
+/// as missing, so paste silently fell back to XTest, which native Wayland apps
+/// ignore.
+#[cfg(target_os = "linux")]
+fn linux_tool_on_path(program: &str) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    std::env::var_os("PATH")
+        .map(|paths| {
+            std::env::split_paths(&paths).any(|dir| {
+                std::fs::metadata(dir.join(program))
+                    .map(|meta| meta.is_file() && meta.permissions().mode() & 0o111 != 0)
+                    .unwrap_or(false)
+            })
+        })
+        .unwrap_or(false)
+}
+
+/// Check if wtype is available (Wayland text input tool)
+#[cfg(target_os = "linux")]
+fn is_wtype_available() -> bool {
+    linux_tool_on_path("wtype")
+}
+
+/// Check if dotool is available (another Wayland text input tool)
+#[cfg(target_os = "linux")]
+fn is_dotool_available() -> bool {
+    linux_tool_on_path("dotool")
+}
+
+/// Check if ydotool is available (uinput-based, works on both Wayland and X11)
+#[cfg(target_os = "linux")]
+fn is_ydotool_available() -> bool {
+    linux_tool_on_path("ydotool")
+}
+
+#[cfg(target_os = "linux")]
+fn is_xdotool_available() -> bool {
+    linux_tool_on_path("xdotool")
+}
+
+/// Check if kwtype is available (KDE Wayland virtual keyboard input tool)
+#[cfg(target_os = "linux")]
+fn is_kwtype_available() -> bool {
+    linux_tool_on_path("kwtype")
+}
+
+/// Check if wl-copy is available (Wayland clipboard tool)
+#[cfg(target_os = "linux")]
+fn is_wl_copy_available() -> bool {
+    linux_tool_on_path("wl-copy")
+}
+
+/// Type text directly via wtype on Wayland.
+#[cfg(target_os = "linux")]
+fn type_text_via_wtype(text: &str) -> Result<(), String> {
+    let output = Command::new("wtype")
+        .arg("--") // Protect against text starting with -
+        .arg(text)
+        .output()
+        .map_err(|e| format!("Failed to execute wtype: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("wtype failed: {}", stderr));
+    }
+
+    Ok(())
+}
+
+/// Type text directly via xdotool on X11.
+#[cfg(target_os = "linux")]
+fn type_text_via_xdotool(text: &str) -> Result<(), String> {
+    let output = Command::new("xdotool")
+        .arg("type")
+        .arg("--clearmodifiers")
+        .arg("--")
+        .arg(text)
+        .output()
+        .map_err(|e| format!("Failed to execute xdotool: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("xdotool failed: {}", stderr));
+    }
+
+    Ok(())
+}
+
+/// The dotool commands that type `text`.
+///
+/// dotool reads one command per line, so a newline inside the text ended the
+/// `type` command and everything after it was parsed as commands and lost (a
+/// cleanup that inserted "new paragraph" breaks did exactly that). Each line is
+/// typed on its own, with Enter pressed between them.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn dotool_script(text: &str) -> String {
+    let mut script = String::with_capacity(text.len() + 16);
+    for (i, line) in text.split('\n').enumerate() {
+        if i > 0 {
+            script.push_str("key enter\n");
+        }
+        let line = line.strip_suffix('\r').unwrap_or(line);
+        if !line.is_empty() {
+            script.push_str("type ");
+            script.push_str(line);
+            script.push('\n');
+        }
+    }
+    script
+}
+
+/// Type text directly via dotool (works on both Wayland and X11 via uinput).
+#[cfg(target_os = "linux")]
+fn type_text_via_dotool(text: &str) -> Result<(), String> {
+    use std::io::Write;
+    use std::process::Stdio;
+
+    let mut child = Command::new("dotool")
+        .stdin(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to spawn dotool: {}", e))?;
+
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin
+            .write_all(dotool_script(text).as_bytes())
+            .map_err(|e| format!("Failed to write to dotool stdin: {}", e))?;
+    }
+
+    let output = child
+        .wait_with_output()
+        .map_err(|e| format!("Failed to wait for dotool: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("dotool failed: {}", stderr));
+    }
+
+    Ok(())
+}
+
+/// Type text directly via ydotool (uinput-based, requires ydotoold daemon).
+#[cfg(target_os = "linux")]
+fn type_text_via_ydotool(text: &str) -> Result<(), String> {
+    let output = Command::new("ydotool")
+        .arg("type")
+        .arg("--")
+        .arg(text)
+        .output()
+        .map_err(|e| format!("Failed to execute ydotool: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("ydotool failed: {}", stderr));
+    }
+
+    Ok(())
+}
+
+/// Type text directly via kwtype (KDE Wayland virtual keyboard, uses KDE Fake Input protocol).
+#[cfg(target_os = "linux")]
+fn type_text_via_kwtype(text: &str) -> Result<(), String> {
+    let output = Command::new("kwtype")
+        .arg("--")
+        .arg(text)
+        .output()
+        .map_err(|e| format!("Failed to execute kwtype: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("kwtype failed: {}", stderr));
+    }
+
+    Ok(())
+}
+
+/// Write text to clipboard via wl-copy (Wayland clipboard tool).
+///
+/// The text goes in on stdin, never as an argument. wl-copy keeps serving the
+/// clipboard from a forked daemon, and that daemon's command line is readable
+/// by every local process in `/proc/<pid>/cmdline` for as long as it lives — so
+/// as an argument, the transcript (or the user's restored clipboard, which can
+/// be a password) sat there in plain view. An argument is also capped at about
+/// 128 KiB, which a long dictation can exceed.
+///
+/// `--type` pins the MIME type; reading stdin, wl-copy would otherwise guess it
+/// from the content. stdout/stderr stay null: the daemon inherits them, and a
+/// pipe there would keep a reader waiting for as long as the daemon lives.
+#[cfg(target_os = "linux")]
+fn write_clipboard_via_wl_copy(text: &str) -> Result<(), String> {
+    use std::io::Write;
+    use std::process::Stdio;
+    let mut child = Command::new("wl-copy")
+        .args(["--type", "text/plain;charset=utf-8"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| format!("Failed to execute wl-copy: {}", e))?;
+
+    // Dropping the handle closes the pipe, which is the EOF wl-copy waits for.
+    let written = match child.stdin.take() {
+        Some(mut stdin) => stdin
+            .write_all(text.as_bytes())
+            .map_err(|e| format!("Failed to send text to wl-copy: {}", e)),
+        None => Err("wl-copy has no stdin".to_string()),
+    };
+
+    let status = child
+        .wait()
+        .map_err(|e| format!("Failed to wait for wl-copy: {}", e))?;
+    written?;
+    if !status.success() {
+        return Err("wl-copy failed".into());
+    }
+
+    Ok(())
+}
+
+/// Send a key combination (e.g., Ctrl+V) via wtype on Wayland.
+#[cfg(target_os = "linux")]
+fn send_key_combo_via_wtype(paste_method: &PasteMethod) -> Result<(), String> {
+    let args: Vec<&str> = match paste_method {
+        PasteMethod::CtrlV => vec!["-M", "ctrl", "-k", "v"],
+        PasteMethod::ShiftInsert => vec!["-M", "shift", "-k", "Insert"],
+        PasteMethod::CtrlShiftV => vec!["-M", "ctrl", "-M", "shift", "-k", "v"],
+        _ => return Err("Unsupported paste method".into()),
+    };
+
+    let output = Command::new("wtype")
+        .args(&args)
+        .output()
+        .map_err(|e| format!("Failed to execute wtype: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("wtype failed: {}", stderr));
+    }
+
+    Ok(())
+}
+
+/// Send a key combination (e.g., Ctrl+V) via dotool.
+#[cfg(target_os = "linux")]
+fn send_key_combo_via_dotool(paste_method: &PasteMethod) -> Result<(), String> {
+    let command;
+    match paste_method {
+        PasteMethod::CtrlV => command = "echo key ctrl+v | dotool",
+        PasteMethod::ShiftInsert => command = "echo key shift+insert | dotool",
+        PasteMethod::CtrlShiftV => command = "echo key ctrl+shift+v | dotool",
+        _ => return Err("Unsupported paste method".into()),
+    }
+    use std::process::Stdio;
+    let status = Command::new("sh")
+        .arg("-c")
+        .arg(command)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|e| format!("Failed to execute dotool: {}", e))?;
+    if !status.success() {
+        return Err("dotool failed".into());
+    }
+
+    Ok(())
+}
+
+/// Send a key combination (e.g., Ctrl+V) via ydotool (requires ydotoold daemon).
+#[cfg(target_os = "linux")]
+fn send_key_combo_via_ydotool(paste_method: &PasteMethod) -> Result<(), String> {
+    // ydotool uses Linux input event keycodes with format <keycode>:<pressed>
+    // where pressed is 1 for down, 0 for up. Keycodes: ctrl=29, shift=42, v=47, insert=110
+    let args: Vec<&str> = match paste_method {
+        PasteMethod::CtrlV => vec!["key", "29:1", "47:1", "47:0", "29:0"],
+        PasteMethod::ShiftInsert => vec!["key", "42:1", "110:1", "110:0", "42:0"],
+        PasteMethod::CtrlShiftV => vec!["key", "29:1", "42:1", "47:1", "47:0", "42:0", "29:0"],
+        _ => return Err("Unsupported paste method".into()),
+    };
+
+    let output = Command::new("ydotool")
+        .args(&args)
+        .output()
+        .map_err(|e| format!("Failed to execute ydotool: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("ydotool failed: {}", stderr));
+    }
+
+    Ok(())
+}
+
+/// Send a key combination (e.g., Ctrl+V) via xdotool on X11.
+#[cfg(target_os = "linux")]
+fn send_key_combo_via_xdotool(paste_method: &PasteMethod) -> Result<(), String> {
+    let key_combo = match paste_method {
+        PasteMethod::CtrlV => "ctrl+v",
+        PasteMethod::CtrlShiftV => "ctrl+shift+v",
+        PasteMethod::ShiftInsert => "shift+Insert",
+        _ => return Err("Unsupported paste method".into()),
+    };
+
+    let output = Command::new("xdotool")
+        .arg("key")
+        .arg("--clearmodifiers")
+        .arg(key_combo)
+        .output()
+        .map_err(|e| format!("Failed to execute xdotool: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("xdotool failed: {}", stderr));
+    }
+
+    Ok(())
+}
+
+/// Pastes text by invoking an external script.
+/// The script receives the text to paste as a single argument.
+fn paste_via_external_script(text: &str, script_path: &str) -> Result<(), String> {
+    info!("Pasting via external script: {}", script_path);
+
+    let output = Command::new(script_path)
+        .arg(text)
+        .output()
+        .map_err(|e| format!("Failed to execute external script '{}': {}", script_path, e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        return Err(format!(
+            "External script '{}' failed with exit code {:?}. stderr: {}, stdout: {}",
+            script_path,
+            output.status.code(),
+            stderr.trim(),
+            stdout.trim()
+        ));
+    }
+
+    Ok(())
+}
+
+/// Types text directly by simulating individual key presses.
+fn paste_direct(
+    enigo: &mut Enigo,
+    text: &str,
+    #[cfg(target_os = "linux")] typing_tool: TypingTool,
+) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        if try_direct_typing_linux(text, typing_tool)? {
+            return Ok(());
+        }
+        info!("Falling back to enigo for direct text input");
+    }
+
+    input::paste_text_direct(enigo, text)
+}
+
+fn send_return_key(enigo: &mut Enigo, key_type: AutoSubmitKey) -> Result<(), String> {
+    // Same reason as every other synthetic sequence: our own keystrokes must not
+    // be matched against a global hotkey the user may be holding. See
+    // `input::synthesizing`.
+    let _injected = handy_keys::ignore_injected_input();
+    match key_type {
+        AutoSubmitKey::Enter => {
+            enigo
+                .key(Key::Return, Direction::Press)
+                .map_err(|e| format!("Failed to press Return key: {}", e))?;
+            enigo
+                .key(Key::Return, Direction::Release)
+                .map_err(|e| format!("Failed to release Return key: {}", e))?;
+        }
+        AutoSubmitKey::CtrlEnter => {
+            enigo
+                .key(Key::Control, Direction::Press)
+                .map_err(|e| format!("Failed to press Control key: {}", e))?;
+            enigo
+                .key(Key::Return, Direction::Press)
+                .map_err(|e| format!("Failed to press Return key: {}", e))?;
+            enigo
+                .key(Key::Return, Direction::Release)
+                .map_err(|e| format!("Failed to release Return key: {}", e))?;
+            enigo
+                .key(Key::Control, Direction::Release)
+                .map_err(|e| format!("Failed to release Control key: {}", e))?;
+        }
+        AutoSubmitKey::CmdEnter => {
+            enigo
+                .key(Key::Meta, Direction::Press)
+                .map_err(|e| format!("Failed to press Meta/Cmd key: {}", e))?;
+            enigo
+                .key(Key::Return, Direction::Press)
+                .map_err(|e| format!("Failed to press Return key: {}", e))?;
+            enigo
+                .key(Key::Return, Direction::Release)
+                .map_err(|e| format!("Failed to release Return key: {}", e))?;
+            enigo
+                .key(Key::Meta, Direction::Release)
+                .map_err(|e| format!("Failed to release Meta/Cmd key: {}", e))?;
+        }
+    }
+
+    Ok(())
+}
+
+fn should_send_auto_submit(auto_submit: bool, paste_method: PasteMethod) -> bool {
+    auto_submit && paste_method != PasteMethod::None
+}
+
+/// Per-call overrides on top of the user's paste settings. Dictation uses the
+/// defaults (settings apply as-is); Flow disables the trailing space and
+/// auto-submit so a generated artifact lands exactly as produced.
+#[derive(Debug, Clone, Copy)]
+pub struct PasteBehavior {
+    pub allow_trailing_space: bool,
+    pub allow_auto_submit: bool,
+}
+
+impl Default for PasteBehavior {
+    fn default() -> Self {
+        Self {
+            allow_trailing_space: true,
+            allow_auto_submit: true,
+        }
+    }
+}
+
+pub fn paste(text: String, app_handle: AppHandle) -> Result<(), String> {
+    paste_with_behavior(text, app_handle, PasteBehavior::default())
+}
+
+pub fn paste_with_behavior(
+    text: String,
+    app_handle: AppHandle,
+    behavior: PasteBehavior,
+) -> Result<(), String> {
+    let settings = get_settings(&app_handle);
+    let paste_method = settings.paste_method;
+    let paste_delay_ms = settings.paste_delay_ms;
+
+    // Append trailing space if setting is enabled
+    let text = if behavior.allow_trailing_space && settings.append_trailing_space {
+        format!("{} ", text)
+    } else {
+        text
+    };
+
+    info!(
+        "Using paste method: {:?}, delay: {}ms",
+        paste_method, paste_delay_ms
+    );
+
+    // Get the managed Enigo instance
+    let enigo_state = app_handle
+        .try_state::<EnigoState>()
+        .ok_or("Enigo state not initialized")?;
+    let mut enigo = enigo_state
+        .0
+        .lock()
+        .map_err(|e| format!("Failed to lock Enigo: {}", e))?;
+
+    // Every method below except `None` and `ExternalScript` delivers the text to
+    // whatever holds keyboard focus right now. If one of our own windows took the
+    // foreground since recording started — most often the always-on-top recording
+    // overlay catching a click in its transparent frame — the transcript would go
+    // into that window and vanish. Hand the foreground back first.
+    if !matches!(
+        paste_method,
+        PasteMethod::None | PasteMethod::ExternalScript
+    ) {
+        input::restore_paste_target();
+    }
+
+    // Perform the paste operation. Capture the result instead of using `?` so we
+    // can always run the modifier-release safety net below, even on failure.
+    let paste_result: Result<(), String> = match paste_method {
+        PasteMethod::None => {
+            info!("PasteMethod::None selected - skipping paste action");
+            Ok(())
+        }
+        PasteMethod::Direct => paste_direct(
+            &mut enigo,
+            &text,
+            #[cfg(target_os = "linux")]
+            settings.typing_tool,
+        ),
+        PasteMethod::CtrlV | PasteMethod::CtrlShiftV | PasteMethod::ShiftInsert => {
+            paste_via_clipboard(
+                &mut enigo,
+                &text,
+                &app_handle,
+                &paste_method,
+                paste_delay_ms,
+            )
+        }
+        PasteMethod::ExternalScript => match settings
+            .external_script_path
+            .as_ref()
+            .filter(|p| !p.is_empty())
+        {
+            Some(script_path) => paste_via_external_script(&text, script_path),
+            None => Err("External script path is not configured".to_string()),
+        },
+    };
+
+    // Auto-submit (Enter / Ctrl+Enter / Cmd+Enter) only when the paste succeeded.
+    let submit_result: Result<(), String> = if paste_result.is_ok()
+        && behavior.allow_auto_submit
+        && should_send_auto_submit(settings.auto_submit, paste_method)
+    {
+        std::thread::sleep(Duration::from_millis(50));
+        send_return_key(&mut enigo, settings.auto_submit_key)
+    } else {
+        Ok(())
+    };
+
+    // Safety net: for any method that synthesizes keystrokes, make sure we never
+    // leave a modifier (Ctrl/Shift/Alt/Cmd) stuck "pressed" at the OS level if a
+    // key-combo was interrupted midway — the classic cause of a key appearing to
+    // be held down continuously after a paste.
+    if !matches!(
+        paste_method,
+        PasteMethod::None | PasteMethod::ExternalScript
+    ) {
+        input::release_all_modifiers(&mut enigo);
+    }
+
+    // Surface the first error now that the cleanup has run.
+    paste_result?;
+    submit_result?;
+
+    // After pasting, optionally copy to clipboard based on settings
+    if settings.clipboard_handling == ClipboardHandling::CopyToClipboard {
+        let clipboard = app_handle.clipboard();
+        clipboard
+            .write_text(&text)
+            .map_err(|e| format!("Failed to copy to clipboard: {}", e))?;
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn auto_submit_requires_setting_enabled() {
+        assert!(!should_send_auto_submit(false, PasteMethod::CtrlV));
+        assert!(!should_send_auto_submit(false, PasteMethod::Direct));
+    }
+
+    #[test]
+    fn auto_submit_skips_none_paste_method() {
+        assert!(!should_send_auto_submit(true, PasteMethod::None));
+    }
+
+    #[test]
+    fn auto_submit_runs_for_active_paste_methods() {
+        assert!(should_send_auto_submit(true, PasteMethod::CtrlV));
+        assert!(should_send_auto_submit(true, PasteMethod::Direct));
+        assert!(should_send_auto_submit(true, PasteMethod::CtrlShiftV));
+        assert!(should_send_auto_submit(true, PasteMethod::ShiftInsert));
+    }
+
+    #[test]
+    fn dotool_script_types_each_line_and_presses_enter_between() {
+        assert_eq!(dotool_script("hello world"), "type hello world\n");
+        assert_eq!(
+            dotool_script("first\nsecond"),
+            "type first\nkey enter\ntype second\n"
+        );
+        // Blank lines are Enter presses only; CRLF is treated as a newline.
+        assert_eq!(
+            dotool_script("a\r\n\r\nb\n"),
+            "type a\nkey enter\nkey enter\ntype b\nkey enter\n"
+        );
+    }
+}

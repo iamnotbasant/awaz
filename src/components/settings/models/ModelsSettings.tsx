@@ -1,0 +1,797 @@
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { ask } from "@tauri-apps/plugin-dialog";
+import { toast } from "sonner";
+import {
+  ChevronDown,
+  ChevronRight,
+  Globe,
+  HardDrive,
+  Languages,
+  Plus,
+  Radio,
+  Search,
+  Trash2,
+  X,
+} from "lucide-react";
+import type { ModelCardStatus } from "@/components/onboarding";
+import { isLegacyModel } from "@/components/onboarding";
+import { useModelStore } from "@/stores/modelStore";
+import { useSettings } from "@/hooks/useSettings";
+import {
+  languageLabel,
+  languageMatches,
+  localizedLanguages,
+} from "@/lib/constants/languages.ts";
+import {
+  getModelCategory,
+  type ModelCategory,
+} from "@/lib/utils/modelCategory";
+import { formatModelSize } from "@/lib/utils/format";
+import { splitLocalModelName } from "@/lib/utils/prettyModelName";
+import {
+  getTranslatedModelDescription,
+  getTranslatedModelName,
+} from "@/lib/utils/modelTranslation";
+import { commands, type ModelInfo } from "@/bindings";
+import { Button } from "@/components/ui/Button";
+import { AddCustomModelDialog } from "./AddCustomModelDialog";
+import { AddLocalModelDialog } from "./AddLocalModelDialog";
+import { ModelRow, ModelTag, ScoreDots, type ModelRowAction } from "./ModelRow";
+
+// check if model supports a language based on its supported_languages list
+const modelSupportsLanguage = (model: ModelInfo, langCode: string): boolean => {
+  return model.supported_languages.includes(langCode);
+};
+
+const CATEGORY_TABS: ModelCategory[] = ["stt", "llm", "tts"];
+
+interface ModelsSettingsProps {
+  /** When set, the catalog shows ONLY this category — no category tabs. Used
+   * by pages that open the catalog for one purpose (e.g. Dictation → stt). */
+  lockedCategory?: ModelCategory;
+}
+
+export const ModelsSettings: React.FC<ModelsSettingsProps> = ({
+  lockedCategory,
+}) => {
+  const { t, i18n } = useTranslation();
+  const [switchingModelId, setSwitchingModelId] = useState<string | null>(null);
+  const [categoryTab, setCategoryTab] = useState<ModelCategory>("stt");
+  const categoryFilter = lockedCategory ?? categoryTab;
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [localDialogOpen, setLocalDialogOpen] = useState(false);
+  const [nameSearch, setNameSearch] = useState("");
+  const [showOlderModels, setShowOlderModels] = useState(false);
+  const [languageFilter, setLanguageFilter] = useState("all");
+  const [languageDropdownOpen, setLanguageDropdownOpen] = useState(false);
+  const [languageSearch, setLanguageSearch] = useState("");
+  const languageDropdownRef = useRef<HTMLDivElement>(null);
+  const languageSearchInputRef = useRef<HTMLInputElement>(null);
+  const {
+    models,
+    currentModel,
+    downloadingModels,
+    downloadProgress,
+    downloadStats,
+    verifyingModels,
+    extractingModels,
+    loading,
+    downloadModel,
+    cancelDownload,
+    selectModel,
+    deleteModel,
+  } = useModelStore();
+  const { settings, refreshSettings } = useSettings();
+
+  // The active local LLM is the model assigned to the built-in provider in the
+  // Assistant settings. Used to show/select the "Active" Language Model here.
+  const activeLlmId = settings?.assistant_models?.["builtin"] ?? "";
+  // A cleanup fine-tune is "active" when it is the cleanup engine — it is never
+  // the assistant brain, so checking the assistant slot would always say no.
+  const activeCleanupLlmId = settings?.post_process_models?.["builtin"] ?? "";
+
+  // click outside handler for language dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        languageDropdownRef.current &&
+        !languageDropdownRef.current.contains(event.target as Node)
+      ) {
+        setLanguageDropdownOpen(false);
+        setLanguageSearch("");
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // focus search input when dropdown opens
+  useEffect(() => {
+    if (languageDropdownOpen && languageSearchInputRef.current) {
+      languageSearchInputRef.current.focus();
+    }
+  }, [languageDropdownOpen]);
+
+  // filtered languages for dropdown (exclude "auto"), named in the UI language
+  const filteredLanguages = useMemo(() => {
+    return localizedLanguages(i18n.language).filter(
+      (lang) => lang.value !== "auto" && languageMatches(lang, languageSearch),
+    );
+  }, [languageSearch, i18n.language]);
+
+  // Get selected language label
+  const selectedLanguageLabel = useMemo(() => {
+    if (languageFilter === "all") {
+      return t("settings.models.filters.allLanguages");
+    }
+    return languageLabel(languageFilter, i18n.language);
+  }, [languageFilter, t, i18n.language]);
+
+  const getModelStatus = (modelId: string): ModelCardStatus => {
+    if (modelId in extractingModels) {
+      return "extracting";
+    }
+    if (modelId in verifyingModels) {
+      return "verifying";
+    }
+    if (modelId in downloadingModels) {
+      return "downloading";
+    }
+    if (switchingModelId === modelId) {
+      return "switching";
+    }
+    const model = models.find((m: ModelInfo) => m.id === modelId);
+    const category = model ? getModelCategory(model) : "stt";
+    // A model that isn't on disk can never be "active" — guard this first so a
+    // stale selection (e.g. an LLM download that failed after being chosen)
+    // shows as downloadable again instead of a dead-end "active" card with no
+    // way to (re)download it.
+    if (!model?.is_downloaded) {
+      return "downloadable";
+    }
+    // STT uses the recording model; LLM uses the built-in assistant model.
+    if (category === "stt" && modelId === currentModel) {
+      return "active";
+    }
+    if (category === "llm") {
+      const activeId = model.is_cleanup_specialist
+        ? activeCleanupLlmId
+        : activeLlmId;
+      if (modelId === activeId) {
+        return "active";
+      }
+    }
+    return "available";
+  };
+
+  const getDownloadProgress = (modelId: string): number | undefined => {
+    const progress = downloadProgress[modelId];
+    return progress?.percentage;
+  };
+
+  const getDownloadSpeed = (modelId: string): number | undefined => {
+    const stats = downloadStats[modelId];
+    return stats?.speed;
+  };
+
+  /**
+   * A local model whose file has gone missing (moved, renamed, or on a drive
+   * that isn't connected). There is nothing to download in that case, so say
+   * what's actually wrong instead of letting a "download" fail obscurely.
+   */
+  const reportIfLocalFileMissing = (model: ModelInfo | undefined): boolean => {
+    if (!model?.local_path || model.is_downloaded) return false;
+    toast.error(
+      t("settings.models.localModel.fileMissing", { path: model.local_path }),
+    );
+    return true;
+  };
+
+  const handleModelSelect = async (modelId: string) => {
+    const model = models.find((m: ModelInfo) => m.id === modelId);
+    const category = model ? getModelCategory(model) : "stt";
+    // TTS (Kokoro) has no "active" selection here — it is configured per
+    // engine in the Assistant tab.
+    if (category === "tts") return;
+    if (reportIfLocalFileMissing(model)) return;
+
+    setSwitchingModelId(modelId);
+    try {
+      if (category === "llm") {
+        // Never point anything at a model that isn't on disk — that's the state
+        // that used to strand users. If somehow triggered for a missing model,
+        // download it instead of marking it active.
+        if (!model?.is_downloaded) {
+          await downloadModel(modelId);
+          return;
+        }
+        // "Use model" has to mean the job the model can actually do. A cleanup
+        // fine-tune cannot hold a conversation, so assigning it as the assistant
+        // brain — which is what this page does for every other language model —
+        // would quietly break the assistant. Send it to dictation cleanup
+        // instead, which is the only thing it is for.
+        if (model.is_cleanup_specialist) {
+          await commands.setCleanupLocalModel(modelId);
+          await refreshSettings();
+          return;
+        }
+        // Assign the model to the built-in (local) assistant provider and make
+        // that provider active, mirroring the footer LLM selector.
+        await commands.changeAssistantModelSetting("builtin", modelId);
+        if (settings?.assistant_provider_id !== "builtin") {
+          await commands.setAssistantProvider("builtin");
+        }
+        await refreshSettings();
+      } else {
+        await selectModel(modelId);
+      }
+    } finally {
+      setSwitchingModelId(null);
+    }
+  };
+
+  const handleModelDownload = async (modelId: string) => {
+    const model = models.find((m: ModelInfo) => m.id === modelId);
+    if (reportIfLocalFileMissing(model)) return;
+    await downloadModel(modelId);
+  };
+
+  const handleModelDelete = async (modelId: string) => {
+    const model = models.find((m: ModelInfo) => m.id === modelId);
+    const modelName = model?.name || modelId;
+    const category = model ? getModelCategory(model) : "stt";
+    const isActive =
+      category === "llm"
+        ? modelId ===
+          (model?.is_cleanup_specialist ? activeCleanupLlmId : activeLlmId)
+        : modelId === currentModel;
+
+    const confirmed = await ask(
+      // A local model is only unregistered — saying "delete" would imply we
+      // remove the user's own file, which we never do.
+      model?.local_path
+        ? t("settings.models.localModel.removeConfirm", {
+            modelName,
+            path: model.local_path,
+          })
+        : isActive
+          ? t("settings.models.deleteActiveConfirm", { modelName })
+          : t("settings.models.deleteConfirm", { modelName }),
+      {
+        title: model?.local_path
+          ? t("settings.models.localModel.removeTitle")
+          : t("settings.models.deleteTitle"),
+        kind: "warning",
+      },
+    );
+
+    if (confirmed) {
+      try {
+        await deleteModel(modelId);
+      } catch (err) {
+        console.error(`Failed to delete model ${modelId}:`, err);
+      }
+    }
+  };
+  const handleModelCancel = async (modelId: string) => {
+    try {
+      await cancelDownload(modelId);
+    } catch (err) {
+      console.error(`Failed to cancel download for ${modelId}:`, err);
+    }
+  };
+
+  // Filter models by active category, then (for transcription) language, then
+  // by the free-text model-name search (matches the translated display name and
+  // the raw catalog name so either works).
+  const filteredModels = useMemo(() => {
+    const query = nameSearch.trim().toLowerCase();
+    return models.filter((model: ModelInfo) => {
+      if (getModelCategory(model) !== categoryFilter) return false;
+      if (categoryFilter === "stt" && languageFilter !== "all") {
+        if (!modelSupportsLanguage(model, languageFilter)) return false;
+      }
+      if (query) {
+        const displayName = getTranslatedModelName(model, t).toLowerCase();
+        if (
+          !displayName.includes(query) &&
+          !model.name.toLowerCase().includes(query)
+        ) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [models, languageFilter, categoryFilter, nameSearch, t]);
+
+  // Split filtered models into: downloaded (incl. custom), available-to-download
+  // (recommended / modern), and — for transcription only — an "older models"
+  // group for not-yet-downloaded old-engine (transcribe-rs) models, which is
+  // collapsed by default so a first-timer only sees the recommended few.
+  const { downloadedModels, availableModels, olderModels } = useMemo(() => {
+    const downloaded: ModelInfo[] = [];
+    const available: ModelInfo[] = [];
+    const older: ModelInfo[] = [];
+
+    for (const model of filteredModels) {
+      const onDisk =
+        model.is_custom ||
+        model.is_downloaded ||
+        model.id in downloadingModels ||
+        model.id in extractingModels;
+      if (onDisk) {
+        // Downloaded models always stay in "Downloaded" (they're relevant
+        // regardless of engine); a quiet card tag marks the older ones.
+        downloaded.push(model);
+      } else if (categoryFilter === "stt" && isLegacyModel(model)) {
+        older.push(model);
+      } else {
+        available.push(model);
+      }
+    }
+
+    // Which model counts as "active" depends on the category, and for language
+    // models also on the model: STT uses the recording model, a cleanup
+    // fine-tune uses the cleanup slot, and every other LLM uses the assistant
+    // slot. This has to match the badge logic in `getModelStatus`, or a model
+    // could show "Active" without sorting to the top.
+    const isActiveForCategory = (m: ModelInfo): boolean => {
+      if (categoryFilter !== "llm") return m.id === currentModel;
+      return (
+        m.id === (m.is_cleanup_specialist ? activeCleanupLlmId : activeLlmId)
+      );
+    };
+
+    // Recommendation order key: ranked-recommended first (by rank, 1 = top),
+    // then recommended-without-rank, then everything else. Mirrors Handy's
+    // catalog ordering so the new streaming models lead the list.
+    const rankOf = (m: ModelInfo): number =>
+      m.is_recommended ? (m.recommended_rank ?? 1_000) : 10_000;
+
+    // Sort: active model first, then by recommendation order, then non-custom
+    // before custom, with accuracy as the final tie-breaker.
+    downloaded.sort((a, b) => {
+      if (isActiveForCategory(a)) return -1;
+      if (isActiveForCategory(b)) return 1;
+      if (a.is_custom !== b.is_custom) return a.is_custom ? 1 : -1;
+      const rankDiff = rankOf(a) - rankOf(b);
+      if (rankDiff !== 0) return rankDiff;
+      return b.accuracy_score - a.accuracy_score;
+    });
+
+    // Available (not-yet-downloaded) models: same recommendation order so the
+    // recommended set surfaces at the top, then most-accurate first.
+    available.sort((a, b) => {
+      const rankDiff = rankOf(a) - rankOf(b);
+      if (rankDiff !== 0) return rankDiff;
+      return b.accuracy_score - a.accuracy_score;
+    });
+
+    // Older (legacy) models: most-accurate first — no recommendation ranking.
+    older.sort((a, b) => b.accuracy_score - a.accuracy_score);
+
+    return {
+      downloadedModels: downloaded,
+      availableModels: available,
+      olderModels: older,
+    };
+  }, [
+    filteredModels,
+    downloadingModels,
+    extractingModels,
+    currentModel,
+    activeLlmId,
+    activeCleanupLlmId,
+    categoryFilter,
+  ]);
+
+  // Auto-expand the "Older models" group while searching so a name search can
+  // reach a legacy model without the user first opening the section.
+  const isSearching = nameSearch.trim() !== "";
+  const olderModelsOpen = showOlderModels || isSearching;
+  const hasAnyResults =
+    downloadedModels.length > 0 ||
+    availableModels.length > 0 ||
+    olderModels.length > 0;
+
+  const renderModelRow = (model: ModelInfo) => {
+    const status = getModelStatus(model.id);
+    const category = getModelCategory(model);
+    const { name, quant } = splitLocalModelName(
+      getTranslatedModelName(model, t),
+      model.filename,
+    );
+    const missing = !!model.local_path && !model.is_downloaded;
+    const busy =
+      status === "downloading" ||
+      status === "verifying" ||
+      status === "extracting";
+    // Models from a linked folder can't be removed one at a time — the next
+    // scan would just find them again. Unlinking the folder is the action that
+    // works, so don't offer one that doesn't.
+    const removable =
+      category !== "tts" &&
+      !model.local_folder &&
+      (model.is_downloaded || model.is_custom || missing);
+
+    const action: ModelRowAction = busy
+      ? { kind: "none" }
+      : missing
+        ? { kind: "missing", title: model.local_path ?? undefined }
+        : status === "downloadable"
+          ? {
+              kind: "download",
+              onClick: () => void handleModelDownload(model.id),
+            }
+          : status === "switching"
+            ? { kind: "switching" }
+            : status === "active"
+              ? { kind: "inUse" }
+              : category === "tts"
+                ? { kind: "none" }
+                : {
+                    kind: "use",
+                    onClick: () => void handleModelSelect(model.id),
+                    ariaLabel: t("catalog.useNamed", {
+                      model: name,
+                      job: t(`settings.models.categories.${category}`),
+                    }),
+                  };
+
+    const languages = model.supported_languages;
+    const languageText =
+      languages.length === 1
+        ? t("modelSelector.capabilities.languageOnly", {
+            language: languageLabel(languages[0], i18n.language),
+          })
+        : languages.length > 1
+          ? t("modelSelector.capabilities.multiLanguage")
+          : null;
+
+    return (
+      <ModelRow
+        key={model.id}
+        model={model}
+        name={name}
+        quant={model.is_custom ? quant : null}
+        subtitle={getTranslatedModelDescription(model, t)}
+        size={formatModelSize(Number(model.size_mb))}
+        current={status === "active"}
+        badges={
+          <>
+            {model.supports_streaming && !isLegacyModel(model) && (
+              <ModelTag tone="success" icon={Radio}>
+                {t("modelSelector.capabilities.streaming")}
+              </ModelTag>
+            )}
+            {model.is_recommended && status !== "active" && (
+              <ModelTag>{t("onboarding.recommended")}</ModelTag>
+            )}
+          </>
+        }
+        meta={
+          category === "stt" ? (
+            <>
+              {languageText && (
+                <span className="inline-flex items-center gap-1">
+                  <Globe className="h-3.5 w-3.5" aria-hidden="true" />
+                  {languageText}
+                </span>
+              )}
+              {model.supports_translation && (
+                <span className="inline-flex items-center gap-1">
+                  <Languages className="h-3.5 w-3.5" aria-hidden="true" />
+                  {t("modelSelector.capabilities.translate")}
+                </span>
+              )}
+              {model.accuracy_score > 0 && (
+                <ScoreDots
+                  label={t("onboarding.modelCard.accuracy")}
+                  score={model.accuracy_score}
+                />
+              )}
+              {model.speed_score > 0 && (
+                <ScoreDots
+                  label={t("onboarding.modelCard.speed")}
+                  score={model.speed_score}
+                />
+              )}
+            </>
+          ) : undefined
+        }
+        action={action}
+        menu={
+          removable && !busy
+            ? [
+                {
+                  id: "delete",
+                  icon: Trash2,
+                  tone: "danger",
+                  label: model.local_path
+                    ? t("catalog.removeFromList")
+                    : t("common.delete"),
+                  hint:
+                    status === "active"
+                      ? t("settings.assistant.brain.switchBeforeDelete")
+                      : undefined,
+                  disabled: status === "active",
+                  onSelect: () => void handleModelDelete(model.id),
+                },
+              ]
+            : undefined
+        }
+        progress={
+          busy
+            ? {
+                state: status,
+                percent: getDownloadProgress(model.id),
+                speed: getDownloadSpeed(model.id),
+                onCancel:
+                  status === "downloading"
+                    ? () => void handleModelCancel(model.id)
+                    : undefined,
+              }
+            : null
+        }
+      />
+    );
+  };
+
+  /** A section of the catalog: a quiet heading over one bordered list. */
+  const renderSection = (title: React.ReactNode, list: ModelInfo[]) => (
+    <section className="space-y-2.5">
+      <h2 className="px-1 text-[0.8125rem] font-semibold text-muted">
+        {title}
+      </h2>
+      <div className="divide-y divide-hairline rounded-2xl border border-hairline bg-surface elev-card">
+        {list.map(renderModelRow)}
+      </div>
+    </section>
+  );
+
+  if (loading) {
+    return (
+      <div className="w-full">
+        <div className="flex items-center justify-center py-16">
+          <div className="w-8 h-8 border-2 border-hairline-strong border-t-ink rounded-full animate-spin" />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full space-y-6">
+      {/* Category switcher: Transcription / Language Model / Speech — hidden
+          when the catalog is locked to a single purpose. */}
+      {!lockedCategory && (
+        <>
+          <div className="flex items-center gap-0.5 p-0.5 bg-surface-strong rounded-lg w-fit">
+            {CATEGORY_TABS.map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setCategoryTab(cat)}
+                className={`px-3.5 py-1.5 text-[13px] font-medium rounded-[7px] transition-all duration-150 cursor-pointer ${
+                  categoryFilter === cat
+                    ? "bg-surface text-ink shadow-[0_1px_3px_rgba(0,0,0,0.12)]"
+                    : "text-muted hover:text-ink"
+                }`}
+              >
+                {t(`settings.models.categories.${cat}`)}
+              </button>
+            ))}
+          </div>
+          <p className="text-[13px] text-muted">
+            {t(`settings.models.categoryDescriptions.${categoryFilter}`)}
+          </p>
+        </>
+      )}
+      {categoryFilter === "llm" && (
+        <p className="text-xs text-muted-soft">
+          {t("settings.models.llmHint")}
+        </p>
+      )}
+      {categoryFilter === "tts" && (
+        <p className="text-xs text-muted-soft">
+          {t("settings.models.ttsHint")}
+        </p>
+      )}
+      {/* Toolbar: model-name search + (stt) language filter / (llm) add custom.
+          Kept above the sections so it's always reachable, even with no results.
+          Wraps on a narrow window so the buttons never run off the pane. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-w-[12rem] flex-1 items-center gap-2 px-3 py-2 bg-surface border border-hairline rounded-lg focus-within:border-ink transition-colors">
+          <Search className="w-4 h-4 shrink-0 text-muted-soft" />
+          <input
+            type="text"
+            value={nameSearch}
+            onChange={(e) => setNameSearch(e.target.value)}
+            placeholder={t("settings.models.searchPlaceholder")}
+            className="flex-1 min-w-0 bg-transparent text-[13px] text-ink focus:outline-none placeholder:text-muted-soft"
+          />
+          {nameSearch && (
+            <button
+              type="button"
+              onClick={() => setNameSearch("")}
+              aria-label={t("settings.models.clearSearch")}
+              className="shrink-0 text-muted-soft hover:text-ink transition-colors cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+        {/* Language filter dropdown (transcription models only) */}
+        {categoryFilter === "stt" && (
+          <div className="relative" ref={languageDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setLanguageDropdownOpen(!languageDropdownOpen)}
+              className={`flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium rounded-lg transition-colors cursor-pointer ${
+                languageFilter !== "all"
+                  ? "bg-accent/10 text-accent"
+                  : "bg-surface-strong text-muted hover:text-ink"
+              }`}
+            >
+              <Globe className="w-3.5 h-3.5" />
+              <span className="max-w-[120px] truncate">
+                {selectedLanguageLabel}
+              </span>
+              <ChevronDown
+                className={`w-3.5 h-3.5 transition-transform ${
+                  languageDropdownOpen ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+
+            {languageDropdownOpen && (
+              <div className="absolute top-full end-0 mt-1 w-56 bg-surface border border-hairline rounded-xl shadow-lg z-50 overflow-hidden">
+                <div className="p-2 border-b border-hairline">
+                  <input
+                    ref={languageSearchInputRef}
+                    type="text"
+                    value={languageSearch}
+                    onChange={(e) => setLanguageSearch(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && filteredLanguages.length > 0) {
+                        setLanguageFilter(filteredLanguages[0].value);
+                        setLanguageDropdownOpen(false);
+                        setLanguageSearch("");
+                      } else if (e.key === "Escape") {
+                        setLanguageDropdownOpen(false);
+                        setLanguageSearch("");
+                      }
+                    }}
+                    placeholder={t(
+                      "settings.general.language.searchPlaceholder",
+                    )}
+                    className="w-full px-2.5 py-1.5 text-sm bg-surface border border-hairline-strong rounded-lg focus:outline-none focus:border-ink"
+                  />
+                </div>
+                <div className="max-h-48 overflow-y-auto p-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLanguageFilter("all");
+                      setLanguageDropdownOpen(false);
+                      setLanguageSearch("");
+                    }}
+                    className={`w-full px-3 py-1.5 text-sm text-left rounded-lg transition-colors ${
+                      languageFilter === "all"
+                        ? "bg-surface-strong text-ink font-medium"
+                        : "hover:bg-surface-strong"
+                    }`}
+                  >
+                    {t("settings.models.filters.allLanguages")}
+                  </button>
+                  {filteredLanguages.map((lang) => (
+                    <button
+                      key={lang.value}
+                      type="button"
+                      onClick={() => {
+                        setLanguageFilter(lang.value);
+                        setLanguageDropdownOpen(false);
+                        setLanguageSearch("");
+                      }}
+                      className={`w-full px-3 py-1.5 text-sm text-left rounded-lg transition-colors ${
+                        languageFilter === lang.value
+                          ? "bg-surface-strong text-ink font-medium"
+                          : "hover:bg-surface-strong"
+                      }`}
+                    >
+                      {lang.label}
+                    </button>
+                  ))}
+                  {filteredLanguages.length === 0 && (
+                    <div className="px-3 py-2 text-sm text-muted-soft text-center">
+                      {t("settings.general.language.noResults")}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        {categoryFilter !== "tts" && (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setLocalDialogOpen(true)}
+          >
+            <HardDrive className="w-4 h-4" />
+            {t("settings.models.localModel.addButton")}
+          </Button>
+        )}
+        {categoryFilter === "llm" && (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setAddDialogOpen(true)}
+          >
+            <Plus className="w-4 h-4" />
+            {t("settings.models.customModel.addButton")}
+          </Button>
+        )}
+      </div>
+
+      {hasAnyResults ? (
+        <div className="space-y-8">
+          {downloadedModels.length > 0 &&
+            renderSection(t("settings.models.yourModels"), downloadedModels)}
+
+          {availableModels.length > 0 &&
+            renderSection(
+              t("settings.models.availableModels"),
+              availableModels,
+            )}
+
+          {/* Older models (legacy engine) — collapsed by default, auto-open on search */}
+          {categoryFilter === "stt" && olderModels.length > 0 && (
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={() => setShowOlderModels((v) => !v)}
+                aria-expanded={olderModelsOpen}
+                className="flex cursor-pointer items-center gap-1.5 px-1 text-[0.8125rem] font-semibold text-muted transition-colors hover:text-ink"
+              >
+                <ChevronRight
+                  className={`h-3.5 w-3.5 transition-transform ${
+                    olderModelsOpen ? "rotate-90" : ""
+                  }`}
+                />
+                {t("settings.models.olderModels")}
+                <span className="font-normal text-muted-soft">
+                  ({olderModels.length})
+                </span>
+              </button>
+              {olderModelsOpen && (
+                <div className="space-y-2.5">
+                  <p className="px-1 text-xs text-muted">
+                    {t("settings.models.olderModelsHint")}
+                  </p>
+                  <div className="divide-y divide-hairline rounded-2xl border border-hairline bg-surface elev-card">
+                    {olderModels.map(renderModelRow)}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="text-center py-8 text-text/50">
+          {isSearching
+            ? t("settings.models.noSearchResults", { query: nameSearch.trim() })
+            : t("settings.models.noModelsMatch")}
+        </div>
+      )}
+      <AddCustomModelDialog
+        open={addDialogOpen}
+        onClose={() => setAddDialogOpen(false)}
+      />
+      <AddLocalModelDialog
+        open={localDialogOpen}
+        onClose={() => setLocalDialogOpen(false)}
+      />
+    </div>
+  );
+};
