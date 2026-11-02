@@ -225,6 +225,13 @@ const SHIPPED_PROMPT_IDS = new Set([
   "speakoflow_readable",
   "default_improve_transcriptions",
   "speakoflow_mini_cleanup",
+  "formal_english",
+  "concise_notes",
+  "verbatim_transcription",
+  "intent",
+  "faithful",
+  "zh2en",
+  "casual",
 ]);
 
 const PostProcessingSettingsPromptsComponent: React.FC = () => {
