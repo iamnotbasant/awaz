@@ -4329,7 +4329,9 @@ fn ensure_post_process_defaults(settings: &mut AppSettings) -> bool {
         .iter()
         .any(|p| p.id == FAITHFUL_CLEANUP_PROMPT_ID)
     {
-        settings.post_process_prompts.push(faithful_cleanup_prompt());
+        settings
+            .post_process_prompts
+            .push(faithful_cleanup_prompt());
         changed = true;
     }
     if !settings

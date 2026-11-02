@@ -2582,13 +2582,23 @@ pub(crate) async fn process_transcription_output_with_selection(
                     }
                 } else if let Some(active_proc) = resolve_active_process_name() {
                     if let Some(rule) = match_app_rule(&settings.app_rules, &active_proc) {
-                        log::info!("Matched per-app rule '{}' for process '{}'", rule.name, active_proc);
-                        if let Some(preset) = settings.post_process_prompts.iter().find(|p| p.id == rule.preset_id) {
+                        log::info!(
+                            "Matched per-app rule '{}' for process '{}'",
+                            rule.name,
+                            active_proc
+                        );
+                        if let Some(preset) = settings
+                            .post_process_prompts
+                            .iter()
+                            .find(|p| p.id == rule.preset_id)
+                        {
                             config.prompt = preset.prompt.clone();
                             config.prompt_id = rule.preset_id.clone();
                         }
                         if !rule.prompt_append.trim().is_empty() {
-                            config.prompt.push_str("\n\n---\nAPP-SPECIFIC INSTRUCTIONS:\n");
+                            config
+                                .prompt
+                                .push_str("\n\n---\nAPP-SPECIFIC INSTRUCTIONS:\n");
                             config.prompt.push_str(&rule.prompt_append);
                         }
                     }
@@ -3919,7 +3929,7 @@ async fn run_recovery(app: AppHandle, offer: Offer) {
     let mut dictation = Dictation {
         app: app.clone(),
         hm: Arc::clone(&hm),
-        context,
+        context: context.clone(),
         history,
         flow_cancel_generation,
         fresh: false,
@@ -5571,7 +5581,11 @@ Try plugging it into a coding agent or productivity app listed on https://openro
         assert!(build_hotwords_prompt_layer(&["".to_string(), "   ".to_string()]).is_none());
 
         // Populated hotwords returns formatted section with terms
-        let terms = vec!["PostgreSQL".to_string(), "Tauri".to_string(), "Zustand".to_string()];
+        let terms = vec![
+            "PostgreSQL".to_string(),
+            "Tauri".to_string(),
+            "Zustand".to_string(),
+        ];
         let layer = build_hotwords_prompt_layer(&terms).expect("Should produce hotwords layer");
         assert!(layer.contains("USER TERMINOLOGY & HOTWORDS"));
         assert!(layer.contains("- PostgreSQL"));
@@ -5604,11 +5618,15 @@ Try plugging it into a coding agent or productivity app listed on https://openro
         assert_eq!(matched.id, "teams");
         assert_eq!(matched.preset_id, "intent");
 
-        let matched_caps = match_app_rule(&rules, "TEAMS.EXE").expect("Should match case-insensitively");
+        let matched_caps =
+            match_app_rule(&rules, "TEAMS.EXE").expect("Should match case-insensitively");
         assert_eq!(matched_caps.id, "teams");
 
-        let matched_alt = match_app_rule(&rules, "C:\\Users\\User\\AppData\\Local\\Microsoft\\Teams\\ms-teams.exe")
-            .expect("Should match full path");
+        let matched_alt = match_app_rule(
+            &rules,
+            "C:\\Users\\User\\AppData\\Local\\Microsoft\\Teams\\ms-teams.exe",
+        )
+        .expect("Should match full path");
         assert_eq!(matched_alt.id, "teams");
 
         // 3. Enable Kiro rule and test matching
@@ -5616,7 +5634,9 @@ Try plugging it into a coding agent or productivity app listed on https://openro
         let matched_kiro = match_app_rule(&rules, "kiro.exe").expect("Should match kiro.exe");
         assert_eq!(matched_kiro.id, "kiro");
         assert_eq!(matched_kiro.preset_id, "faithful");
-        assert!(matched_kiro.prompt_append.contains("Optimized for developer tools"));
+        assert!(matched_kiro
+            .prompt_append
+            .contains("Optimized for developer tools"));
 
         // 4. Test mocking active process
         set_mock_active_process(Some("kiro.exe".to_string()));

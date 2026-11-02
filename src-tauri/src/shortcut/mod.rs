@@ -2054,10 +2054,7 @@ pub fn change_context_awareness_enabled_setting(
 
 #[tauri::command]
 #[specta::specta]
-pub fn change_context_selection_model_setting(
-    app: AppHandle,
-    model: String,
-) -> Result<(), String> {
+pub fn change_context_selection_model_setting(app: AppHandle, model: String) -> Result<(), String> {
     let mut s = settings::get_settings(&app);
     s.context_selection_model = model;
     settings::write_settings(&app, s);
@@ -2066,10 +2063,7 @@ pub fn change_context_selection_model_setting(
 
 #[tauri::command]
 #[specta::specta]
-pub fn change_send_hotwords_to_prompt_setting(
-    app: AppHandle,
-    enabled: bool,
-) -> Result<(), String> {
+pub fn change_send_hotwords_to_prompt_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
     let mut s = settings::get_settings(&app);
     s.send_hotwords_to_prompt = enabled;
     settings::write_settings(&app, s);
