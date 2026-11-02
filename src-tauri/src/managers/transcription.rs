@@ -3,7 +3,7 @@ use crate::managers::audio::AudioRecordingManager;
 use crate::managers::model::{EngineType, ModelManager};
 use crate::settings::{
     get_settings, ModelUnloadTimeout, OrtAcceleratorSetting, ResolvedCloudStt,
-    WhisperAcceleratorSetting,
+    SttEngineMode, WhisperAcceleratorSetting,
 };
 use anyhow::Result;
 use log::{debug, error, info, warn};
@@ -1057,6 +1057,24 @@ impl TranscriptionManager {
             let deadline = std::time::Instant::now() + ENGINE_LEASE_WAIT;
             while self.lock_engine().is_none() {
                 if !self.engine_is_leased() || std::time::Instant::now() >= deadline {
+                    // Resilient cloud fallback (D19): If the local model is not loaded, attempt configured cloud STT before failing
+                    let mut cloud_settings = get_settings(&self.app_handle);
+                    cloud_settings.stt_engine_mode = SttEngineMode::Cloud;
+                    if let Ok(cfg) = crate::stt_cloud::resolve_cloud_stt(&cloud_settings) {
+                        warn!("Local model not loaded. Attempting cloud STT fallback: {}", cfg.provider.label);
+                        if let Ok(raw) = crate::stt_cloud::transcribe_cloud_blocking(&cfg, &audio) {
+                            let finished = self.finish_transcription(
+                                &cloud_settings,
+                                raw,
+                                st,
+                                !cfg.keyterms.is_empty(),
+                                cloud_settings.cloud_stt_no_verbatim,
+                                false,
+                                &[],
+                            );
+                            return Ok(finished);
+                        }
+                    }
                     return Err(anyhow::anyhow!("Model is not loaded for transcription."));
                 }
                 let (guard, _) = self

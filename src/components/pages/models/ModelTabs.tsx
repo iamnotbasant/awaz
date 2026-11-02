@@ -14,6 +14,7 @@ import { AssistantSettings } from "@/components/settings/assistant/AssistantSett
 import { useNavigation, type ModelSlot } from "@/components/shell/navigation";
 import { useModelSlots } from "@/components/shell/useModelSlots";
 import { ProviderTestMatrix } from "@/components/settings/sayit-matrix/ProviderTestMatrix";
+import { LocalModeSection } from "@/components/settings/dictation/LocalModeSection";
 
 /**
  * The content of each Models tab.
@@ -58,6 +59,8 @@ export const SpeechTab: React.FC = () => {
 
   return (
     <div className="space-y-9">
+      <LocalModeSection />
+
       <CloudTranscriptionGroup embedded section="setup" />
 
       <ProviderTestMatrix />
