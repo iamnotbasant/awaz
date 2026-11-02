@@ -369,6 +369,14 @@ async changeContextSelectionModelSetting(model: string) : Promise<Result<null, s
     else return { status: "error", error: e  as any };
 }
 },
+async changeSendHotwordsToPromptSetting(enabled: boolean) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("change_send_hotwords_to_prompt_setting", { enabled }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async getSelectionEditPrompt() : Promise<Result<string, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_selection_edit_prompt") };
@@ -3896,7 +3904,7 @@ post_process_custom_tones?: CustomPostProcessTone[];
  * Stable built-in tone ID or a `CustomPostProcessTone.id`. Optional only so
  * old stores can migrate from `post_process_tone` without losing choice.
  */
-post_process_selected_tone_id?: string | null; post_process_timeout_secs?: number; post_process_min_duration_secs?: number; context_awareness_enabled?: boolean; context_selection_model?: string; 
+post_process_selected_tone_id?: string | null; post_process_timeout_secs?: number; post_process_min_duration_secs?: number; context_awareness_enabled?: boolean; context_selection_model?: string; send_hotwords_to_prompt?: boolean; 
 /**
  * How much a reasoning model may think before cleaning a dictation. See
  * [`ThinkingLevel`]; `Off` keeps cleanup on its fast path.

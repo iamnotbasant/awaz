@@ -1983,6 +1983,18 @@ pub fn change_context_selection_model_setting(
 
 #[tauri::command]
 #[specta::specta]
+pub fn change_send_hotwords_to_prompt_setting(
+    app: AppHandle,
+    enabled: bool,
+) -> Result<(), String> {
+    let mut s = settings::get_settings(&app);
+    s.send_hotwords_to_prompt = enabled;
+    settings::write_settings(&app, s);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
 pub fn get_selection_edit_prompt(app: AppHandle) -> Result<String, String> {
     let s = settings::get_settings(&app);
     if let Some(p) = s

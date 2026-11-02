@@ -998,6 +998,7 @@ pub fn run(cli_args: CliArgs) {
             shortcut::change_post_process_min_duration_secs_setting,
             shortcut::change_context_awareness_enabled_setting,
             shortcut::change_context_selection_model_setting,
+            shortcut::change_send_hotwords_to_prompt_setting,
             shortcut::get_selection_edit_prompt,
             shortcut::update_selection_edit_prompt,
             shortcut::reset_selection_edit_prompt,

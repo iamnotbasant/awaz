@@ -21,7 +21,7 @@ export const CategorizedHotwords: React.FC = () => {
     Places: [],
   });
 
-  const sendHotwordsToAi = getSetting("cloud_stt_send_custom_words") ?? true;
+  const sendHotwordsToAi = getSetting("send_hotwords_to_prompt") ?? false;
 
   const loadCategories = async () => {
     try {
@@ -183,15 +183,15 @@ export const CategorizedHotwords: React.FC = () => {
         <ToggleSwitch
           checked={sendHotwordsToAi}
           onChange={(val) =>
-            void updateSetting("cloud_stt_send_custom_words", val)
+            void updateSetting("send_hotwords_to_prompt", val)
           }
-          isUpdating={isUpdating("cloud_stt_send_custom_words")}
+          isUpdating={isUpdating("send_hotwords_to_prompt")}
           label={t("settings.hotwords.sendToAiPrompt", {
-            defaultValue: "Send hotwords to AI prompt & STT native biasing",
+            defaultValue: "Send hotwords to the AI prompt",
           })}
           description={t("settings.hotwords.sendToAiPromptDesc", {
             defaultValue:
-              "Injects your custom hotwords directly into provider ASR biasing and the LLM system prompt for context disambiguation.",
+              "When enabled, your custom hotwords are injected into the AI cleanup prompt to preserve technical terms and proper nouns.",
           })}
         />
       </div>

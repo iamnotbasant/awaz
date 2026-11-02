@@ -97,6 +97,34 @@ fn cleans_up(cleanup_binding: bool, settings: &AppSettings) -> bool {
     cleanup_binding || crate::settings::cleanup_on_dictation(settings)
 }
 
+/// Builds the hotwords injection prompt segment. Returns None if hotwords is empty.
+pub fn build_hotwords_prompt_layer(hotwords: &[String]) -> Option<String> {
+    if hotwords.is_empty() {
+        return None;
+    }
+    let mut terms: Vec<String> = hotwords
+        .iter()
+        .map(|w| w.trim().to_string())
+        .filter(|w| !w.is_empty())
+        .collect();
+    terms.sort();
+    terms.dedup();
+    if terms.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "\n\n---\nUSER TERMINOLOGY & HOTWORDS\n\
+         The following are specialized terms, proper nouns, and keywords specified by the user. \
+         If speech-to-text contains phonetically similar or misheard words, prioritize correcting \
+         them to the exact spelling and casing below and preserve them:\n{}",
+        terms
+            .iter()
+            .map(|t| format!("- {}", t))
+            .collect::<Vec<_>>()
+            .join("\n")
+    ))
+}
+
 /// Whether short speech should skip AI cleanup and paste raw text immediately.
 pub fn should_skip_cleanup_for_duration(min_duration_secs: u32, audio_duration_secs: f64) -> bool {
     min_duration_secs > 0 && audio_duration_secs < (min_duration_secs as f64)
@@ -913,6 +941,11 @@ fn build_post_process_request(
     let notice_len = system_prompt.chars().count();
     system_prompt.push_str(&user_prompt);
     append_style_layer(&mut system_prompt, config.tone_instruction.as_deref());
+    if config.send_hotwords_to_prompt {
+        if let Some(hotwords_layer) = build_hotwords_prompt_layer(&config.hotwords) {
+            system_prompt.push_str(&hotwords_layer);
+        }
+    }
     let layer2_len = system_prompt.chars().count() - layer1_len;
     // Layer 3 — the app's own output contract, and the only part that is not a
     // user choice. It is added *only* when the user selected no prompt, because a
@@ -5434,6 +5467,21 @@ Try plugging it into a coding agent or productivity app listed on https://openro
         assert!(!should_skip_cleanup_for_duration(3, 3.0));
         assert!(!should_skip_cleanup_for_duration(3, 3.1));
         assert!(!should_skip_cleanup_for_duration(3, 15.0));
+    }
+
+    #[test]
+    fn test_p3_hotwords_prompt_layer_generation() {
+        // Empty hotwords returns None
+        assert!(build_hotwords_prompt_layer(&[]).is_none());
+        assert!(build_hotwords_prompt_layer(&["".to_string(), "   ".to_string()]).is_none());
+
+        // Populated hotwords returns formatted section with terms
+        let terms = vec!["PostgreSQL".to_string(), "Tauri".to_string(), "Zustand".to_string()];
+        let layer = build_hotwords_prompt_layer(&terms).expect("Should produce hotwords layer");
+        assert!(layer.contains("USER TERMINOLOGY & HOTWORDS"));
+        assert!(layer.contains("- PostgreSQL"));
+        assert!(layer.contains("- Tauri"));
+        assert!(layer.contains("- Zustand"));
     }
 
     #[test]

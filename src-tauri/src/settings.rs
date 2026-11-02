@@ -628,6 +628,8 @@ pub(crate) struct ResolvedPostProcessConfig {
     pub thinking: ThinkingLevel,
     pub source: PostProcessConfigSource,
     pub api_key: String,
+    pub send_hotwords_to_prompt: bool,
+    pub hotwords: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -1548,6 +1550,9 @@ pub struct AppSettings {
     /// Model to use for selection edits (empty means "Current AI service").
     #[serde(default = "default_context_selection_model")]
     pub context_selection_model: String,
+    /// When on, custom hotwords and vocabulary are injected into the AI cleanup system prompt.
+    #[serde(default = "default_send_hotwords_to_prompt")]
+    pub send_hotwords_to_prompt: bool,
     /// How much a reasoning model may think before cleaning a dictation. See
     /// [`ThinkingLevel`]; `Off` keeps cleanup on its fast path.
     #[serde(default)]
@@ -2114,6 +2119,10 @@ pub fn default_context_awareness_enabled() -> bool {
 
 pub fn default_context_selection_model() -> String {
     String::new()
+}
+
+pub fn default_send_hotwords_to_prompt() -> bool {
+    false
 }
 
 /// Default spoken activation phrase for "Generate with Flow".
@@ -4440,6 +4449,7 @@ pub fn get_default_settings() -> AppSettings {
         post_process_min_duration_secs: default_post_process_min_duration_secs(),
         context_awareness_enabled: default_context_awareness_enabled(),
         context_selection_model: default_context_selection_model(),
+        send_hotwords_to_prompt: default_send_hotwords_to_prompt(),
         post_process_thinking: ThinkingLevel::default(),
         // Seeded rather than left None so `get_default_settings()` is a fixed
         // point of the repair pass below (several tests rely on that, and a
@@ -4964,6 +4974,8 @@ pub(crate) fn resolve_post_process_config(
         thinking: settings.post_process_thinking,
         source,
         api_key,
+        send_hotwords_to_prompt: settings.send_hotwords_to_prompt,
+        hotwords: settings.custom_words.clone(),
     })
 }
 

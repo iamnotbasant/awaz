@@ -242,6 +242,8 @@ const settingUpdaters: {
     commands.changeContextAwarenessEnabledSetting(value as boolean),
   context_selection_model: (value) =>
     commands.changeContextSelectionModelSetting(value as string),
+  send_hotwords_to_prompt: (value) =>
+    commands.changeSendHotwordsToPromptSetting(value as boolean),
   post_process_thinking: (value) =>
     commands.changePostProcessThinkingSetting(value as ThinkingLevel),
   assistant_thinking: (value) =>
