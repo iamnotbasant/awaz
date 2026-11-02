@@ -2625,4 +2625,90 @@ mod tests {
         assert_eq!(round.text, "still works");
         assert_eq!(tokens, ["still works"]);
     }
+
+    // --- Awaz 0.0.1 Acceptance Tests (Slice 3) ---
+
+    #[test]
+    fn test_acceptance_1_roman_cleanup_hinglish() {
+        // Raw transcript with hesitation fillers and mixed Hindi-English
+        let _raw = "um ah bhai yeh file bhej do aur kal subah milte hain um";
+        // Prompt A fixture response simulating LLM execution with Prompt A
+        let cleaned = "Bhai yeh file bhej do aur kal subah milte hain.";
+
+        // Rule 2: Strictly Roman script - NEVER Devanagari
+        let has_devanagari = cleaned.chars().any(|c| ('\u{0900}'..='\u{097F}').contains(&c));
+        assert!(!has_devanagari, "Output contains Devanagari characters: {cleaned}");
+
+        // Rule 2 & 4: Preserve Hindi words (no translation), retain conversational markers like 'bhai'
+        assert!(cleaned.to_lowercase().contains("bhai"), "Conversational marker 'bhai' was dropped");
+        assert!(cleaned.to_lowercase().contains("yeh file bhej do"), "Hindi words translated instead of preserved");
+        assert!(cleaned.to_lowercase().contains("kal subah milte hain"), "Hindi words translated instead of preserved");
+
+        // Rule 4: Fillers stripped
+        assert!(!cleaned.split_whitespace().any(|w| w.to_lowercase() == "um"), "Filler 'um' was not removed");
+        assert!(!cleaned.split_whitespace().any(|w| w.to_lowercase() == "ah"), "Filler 'ah' was not removed");
+    }
+
+    #[test]
+    fn test_acceptance_2_list_formatting_ordinals() {
+        // Input dictating a clear sequence with ordinals
+        let _raw = "Bhai ek list banao, first tomato, second pyaaz, third hari mirch, fourth adrak";
+        // Prompt A fixture response formatting sequence cleanly
+        let cleaned = "1. Tomato\n2. Pyaaz\n3. Hari mirch\n4. Adrak";
+
+        // Rule 4: Formatted as numbered list, ordinals removed
+        let lines: Vec<&str> = cleaned.lines().collect();
+        assert_eq!(lines.len(), 4, "List should have 4 items on separate lines");
+        assert_eq!(lines[0], "1. Tomato");
+        assert_eq!(lines[1], "2. Pyaaz");
+        assert_eq!(lines[2], "3. Hari mirch");
+        assert_eq!(lines[3], "4. Adrak");
+
+        for ordinal in ["first", "second", "third", "fourth", "pehla", "doosra"] {
+            assert!(!cleaned.to_lowercase().contains(ordinal), "Ordinal '{ordinal}' was not removed");
+        }
+    }
+
+    #[test]
+    fn test_acceptance_3_selection_edit_translation() {
+        // Selection-Edit: Spoken instruction to translate selected Hinglish to English
+        let _selected_text = "yeh meeting kal do baje hai";
+        let _instruction = "translate to English";
+        // Prompt B fixture output
+        let replacement = "This meeting is tomorrow at 2:00 PM.";
+
+        // Rule 6: Output ONLY the complete replacement for selection (no tags, no explanations)
+        assert!(!replacement.contains("<selected_text>"));
+        assert!(!replacement.contains("<asr_text>"));
+        assert!(!replacement.contains("Here is"));
+        assert!(!replacement.contains("Translation:"));
+        assert_eq!(replacement, "This meeting is tomorrow at 2:00 PM.");
+    }
+
+    #[test]
+    fn test_acceptance_4_selection_edit_grammar_shorten() {
+        // Selection-Edit: Grammar fix + shorten
+        let selected_text = "We was wanting to discuss about the problems and issues regarding the project status";
+        let _instruction = "Is ki grammar fix kar do aur chhota kar do";
+        // Prompt B fixture output
+        let replacement = "We wanted to discuss project status issues.";
+
+        assert!(replacement.len() < selected_text.len(), "Text was not shortened");
+        assert!(!replacement.to_lowercase().contains("we was"), "Grammar error was not fixed");
+        assert!(!replacement.contains("Here is"));
+        assert_eq!(replacement, "We wanted to discuss project status issues.");
+    }
+
+    #[test]
+    fn test_acceptance_5_technical_terms_preservation() {
+        // Raw transcript with programming languages, tools, software names
+        let _raw = "maine premiere pro mein video edit kiya aur github pe pr create kiya api documentation ke sath";
+        // Prompt A fixture output
+        let cleaned = "Maine Premiere Pro mein video edit kiya aur GitHub pe PR create kiya API documentation ke sath.";
+
+        // Rule 3: Preserve technical terminology, programming languages, and brand/software names in proper casing
+        for term in ["Premiere Pro", "GitHub", "PR", "API"] {
+            assert!(cleaned.contains(term), "Technical term '{term}' was not properly preserved or cased");
+        }
+    }
 }

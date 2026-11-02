@@ -1981,7 +1981,10 @@ mod tests {
         settings.stt_engine_mode = SttEngineMode::Cloud;
         settings.cloud_stt_provider_id = "gemini".to_string();
         // Without key: MissingApiKey error, safe and no crash
-        let err = resolve_cloud_stt(&settings).unwrap_err();
+        let err = match resolve_cloud_stt(&settings) {
+            Err(e) => e,
+            Ok(_) => panic!("expected missing key error"),
+        };
         assert_eq!(err.reason, CloudSttUnavailableReason::MissingApiKey);
         assert_eq!(err.provider_id.as_deref(), Some("gemini"));
 
@@ -2001,7 +2004,10 @@ mod tests {
         settings.stt_engine_mode = SttEngineMode::Cloud;
         settings.cloud_stt_provider_id = "groq".to_string();
         // Without key: MissingApiKey error, safe and no crash
-        let err = resolve_cloud_stt(&settings).unwrap_err();
+        let err = match resolve_cloud_stt(&settings) {
+            Err(e) => e,
+            Ok(_) => panic!("expected missing key error"),
+        };
         assert_eq!(err.reason, CloudSttUnavailableReason::MissingApiKey);
         assert_eq!(err.provider_id.as_deref(), Some("groq"));
 

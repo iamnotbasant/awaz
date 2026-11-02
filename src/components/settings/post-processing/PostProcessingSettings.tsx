@@ -220,6 +220,8 @@ const NONE_PROMPT_ID = "none";
  * user's own prompt has no "original".
  */
 const SHIPPED_PROMPT_IDS = new Set([
+  "hinglish_roman",
+  "selection_edit",
   "speakoflow_readable",
   "default_improve_transcriptions",
   "speakoflow_mini_cleanup",

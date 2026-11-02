@@ -576,8 +576,18 @@ const settings: Json = {
   },
   post_process_prompts: [
     {
+      id: "hinglish_roman",
+      name: "Hinglish Roman (recommended)",
+      prompt: "You are an expert real-time voice-dictation post-processor. Your sole job is to clean and format raw speech-to-text transcripts into clean, readable Hinglish text.",
+    },
+    {
+      id: "selection_edit",
+      name: "Selection-Edit (Context Awareness)",
+      prompt: "You are a \"selected text editor\". Your task is NOT normal ASR cleanup. Edit the selected text according to the user's spoken instruction.",
+    },
+    {
       id: "speakoflow_readable",
-      name: "Readable (recommended)",
+      name: "Readable",
       prompt: "Turn the transcript into readable text.",
     },
     {
@@ -1598,6 +1608,8 @@ const handlers: Record<string, (args: Json) => unknown> = {
   },
   set_cleanup_local_model: ({ modelId }) => {
     const generalPrompts = [
+      "hinglish_roman",
+      "selection_edit",
       "default_improve_transcriptions",
       "speakoflow_readable",
     ];

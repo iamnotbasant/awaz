@@ -4938,6 +4938,7 @@ Try plugging it into a coding agent or productivity app listed on https://openro
         for prompt_id in [
             crate::settings::READABLE_POST_PROCESS_PROMPT_ID,
             crate::settings::DEFAULT_POST_PROCESS_PROMPT_ID,
+            crate::settings::HINGLISH_ROMAN_PROMPT_ID,
         ] {
             let prompt = crate::settings::shipped_post_process_prompt_text(prompt_id).unwrap();
             for tone in [

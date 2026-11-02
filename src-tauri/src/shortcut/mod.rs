@@ -1471,7 +1471,8 @@ pub fn set_cleanup_local_model(app: AppHandle, model_id: String) -> Result<(), S
 /// is. "No prompt" and every prompt the user wrote are never touched.
 fn paired_shipped_prompt(specialist: bool, selected: &str) -> Option<&'static str> {
     let general_shipped = selected == settings::DEFAULT_POST_PROCESS_PROMPT_ID
-        || selected == settings::READABLE_POST_PROCESS_PROMPT_ID;
+        || selected == settings::READABLE_POST_PROCESS_PROMPT_ID
+        || selected == settings::HINGLISH_ROMAN_PROMPT_ID;
     if specialist && general_shipped {
         Some(settings::SPEAKOFLOW_MINI_PROMPT_ID)
     } else if !specialist && selected == settings::SPEAKOFLOW_MINI_PROMPT_ID {
