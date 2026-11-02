@@ -75,6 +75,68 @@ const InstructionsRow: React.FC = () => {
 };
 
 /**
+ * Skip cleanup for short speech: short clips skip the LLM call and paste raw text faster.
+ * 0 = Always cleans up.
+ */
+export const SkipCleanupDurationRow: React.FC = () => {
+  const { t } = useTranslation();
+  const { getSetting, updateSetting, isUpdating } = useSettings();
+  const minSec = getSetting("post_process_min_duration_secs") ?? 0;
+  const enabled = getSetting("post_process_enabled") ?? false;
+
+  const hint =
+    minSec === 0
+      ? t("cleanup.minDuration.always", { defaultValue: "Always cleans up" })
+      : t("cleanup.minDuration.skip", {
+          defaultValue: `Skip cleanup for speech < ${minSec} sec`,
+          seconds: minSec,
+        });
+
+  return (
+    <SettingContainer
+      title={t("cleanup.minDuration.title", {
+        defaultValue: "Skip cleanup for short speech",
+      })}
+      description={t("cleanup.minDuration.description", {
+        defaultValue: "Short clips skip the AI call and paste raw text faster.",
+      })}
+      grouped={true}
+    >
+      <div className="flex items-center gap-3">
+        <span
+          className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+            minSec === 0
+              ? "bg-surface-muted text-muted"
+              : "bg-accent/10 text-accent font-semibold"
+          }`}
+        >
+          {hint}
+        </span>
+        <div className="flex items-center gap-1.5">
+          <input
+            type="number"
+            min={0}
+            max={300}
+            step={1}
+            value={minSec}
+            disabled={!enabled || isUpdating("post_process_min_duration_secs")}
+            onChange={(e) => {
+              const val = Math.max(
+                0,
+                Math.min(300, parseInt(e.target.value, 10) || 0),
+              );
+              void updateSetting("post_process_min_duration_secs", val);
+            }}
+            className="h-8 w-16 rounded-lg border border-hairline bg-surface-muted px-2 text-right text-xs font-mono text-ink focus:border-accent focus:outline-none"
+          />
+          <span className="text-xs text-muted">sec</span>
+        </div>
+      </div>
+    </SettingContainer>
+  );
+};
+
+/**
  * Which shortcut runs cleanup: its own, or the dictation shortcut. The second
  * means one set of keys for everything, with every dictation cleaned up; the
  * backend then releases the separate combo so it stops swallowing those keys
@@ -189,6 +251,7 @@ export const CleanupPage: React.FC = () => {
       <SettingsGroup>
         <ShortcutModeRow />
         <CleanupKeysRow />
+        <SkipCleanupDurationRow />
         <SettingContainer
           title={t("cleanup.model.title")}
           description={t("cleanup.model.info")}

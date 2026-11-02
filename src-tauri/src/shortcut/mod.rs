@@ -1947,6 +1947,18 @@ pub fn change_waveform_style_setting(app: AppHandle, style: String) -> Result<()
 
 #[tauri::command]
 #[specta::specta]
+pub fn change_post_process_min_duration_secs_setting(
+    app: AppHandle,
+    seconds: u32,
+) -> Result<(), String> {
+    let mut s = settings::get_settings(&app);
+    s.post_process_min_duration_secs = seconds.min(300);
+    settings::write_settings(&app, s);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn ping_provider_test(
     app: AppHandle,
     kind: String,

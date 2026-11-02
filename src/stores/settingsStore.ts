@@ -236,6 +236,8 @@ const settingUpdaters: {
     commands.changePostProcessToneSetting(value as string),
   post_process_timeout_secs: (value) =>
     commands.changePostProcessTimeoutSetting(value as number),
+  post_process_min_duration_secs: (value) =>
+    commands.changePostProcessMinDurationSecsSetting(value as number),
   post_process_thinking: (value) =>
     commands.changePostProcessThinkingSetting(value as ThinkingLevel),
   assistant_thinking: (value) =>

@@ -345,6 +345,14 @@ async changePostProcessTimeoutSetting(seconds: number) : Promise<Result<null, st
     else return { status: "error", error: e  as any };
 }
 },
+async changePostProcessMinDurationSecsSetting(seconds: number) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("change_post_process_min_duration_secs_setting", { seconds }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 /**
  * Set how much a reasoning model may think before cleaning a dictation.
  */
@@ -3848,7 +3856,7 @@ post_process_custom_tones?: CustomPostProcessTone[];
  * Stable built-in tone ID or a `CustomPostProcessTone.id`. Optional only so
  * old stores can migrate from `post_process_tone` without losing choice.
  */
-post_process_selected_tone_id?: string | null; post_process_timeout_secs?: number; 
+post_process_selected_tone_id?: string | null; post_process_timeout_secs?: number; post_process_min_duration_secs?: number; 
 /**
  * How much a reasoning model may think before cleaning a dictation. See
  * [`ThinkingLevel`]; `Off` keeps cleanup on its fast path.

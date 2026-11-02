@@ -97,6 +97,11 @@ fn cleans_up(cleanup_binding: bool, settings: &AppSettings) -> bool {
     cleanup_binding || crate::settings::cleanup_on_dictation(settings)
 }
 
+/// Whether short speech should skip AI cleanup and paste raw text immediately.
+pub fn should_skip_cleanup_for_duration(min_duration_secs: u32, audio_duration_secs: f64) -> bool {
+    min_duration_secs > 0 && audio_duration_secs < (min_duration_secs as f64)
+}
+
 /// Return the UI to rest: overlay down, tray idle.
 ///
 /// Every exit from the post-recording pipeline has to end here. The paths that
@@ -2934,6 +2939,25 @@ impl ShortcutAction for TranscribeAction {
                 }
             };
 
+            let audio_duration_secs = sample_count as f64 / 16000.0;
+            let mut effective_post_process = context.post_process;
+            if effective_post_process
+                && should_skip_cleanup_for_duration(
+                    settings.post_process_min_duration_secs,
+                    audio_duration_secs,
+                )
+            {
+                debug!(
+                    "Skipping AI cleanup: audio duration {:.2}s is below threshold of {}s",
+                    audio_duration_secs, settings.post_process_min_duration_secs
+                );
+                effective_post_process = false;
+            }
+            let context = DictationContext {
+                post_process: effective_post_process,
+                flow_eligible: context.flow_eligible,
+            };
+
             let dictation = Dictation {
                 app: ah.clone(),
                 hm,
@@ -5349,6 +5373,24 @@ Try plugging it into a coding agent or productivity app listed on https://openro
         settings.post_process_on_dictation = true;
         assert!(cleans_up(false, &settings));
         assert!(!crate::settings::cleanup_binding_active(&settings));
+    }
+
+    #[test]
+    fn test_p1_skip_cleanup_for_short_speech_duration() {
+        // 0 sec means "Always cleans up"
+        assert!(!should_skip_cleanup_for_duration(0, 0.1));
+        assert!(!should_skip_cleanup_for_duration(0, 1.5));
+        assert!(!should_skip_cleanup_for_duration(0, 10.0));
+
+        // When set to 3 seconds:
+        // Duration < 3.0s -> skip cleanup (returns true)
+        assert!(should_skip_cleanup_for_duration(3, 0.5));
+        assert!(should_skip_cleanup_for_duration(3, 2.9));
+
+        // Duration >= 3.0s -> do not skip cleanup (returns false)
+        assert!(!should_skip_cleanup_for_duration(3, 3.0));
+        assert!(!should_skip_cleanup_for_duration(3, 3.1));
+        assert!(!should_skip_cleanup_for_duration(3, 15.0));
     }
 
     #[test]

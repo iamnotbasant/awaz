@@ -995,6 +995,7 @@ pub fn run(cli_args: CliArgs) {
             shortcut::update_post_process_custom_tone,
             shortcut::delete_post_process_custom_tone,
             shortcut::change_post_process_timeout_setting,
+            shortcut::change_post_process_min_duration_secs_setting,
             shortcut::change_post_process_thinking_setting,
             shortcut::change_experimental_enabled_setting,
             shortcut::change_post_process_base_url_setting,

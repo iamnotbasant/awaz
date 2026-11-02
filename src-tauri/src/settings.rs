@@ -1538,6 +1538,9 @@ pub struct AppSettings {
     pub post_process_selected_tone_id: Option<String>,
     #[serde(default = "default_post_process_timeout_secs")]
     pub post_process_timeout_secs: u32,
+    /// Skip cleanup for speech shorter than this many seconds (0 = always cleans up).
+    #[serde(default = "default_post_process_min_duration_secs")]
+    pub post_process_min_duration_secs: u32,
     /// How much a reasoning model may think before cleaning a dictation. See
     /// [`ThinkingLevel`]; `Off` keeps cleanup on its fast path.
     #[serde(default)]
@@ -2092,6 +2095,10 @@ fn keeps_previous_default(id: &str, previous_default: &str) -> bool {
 /// transcription instead. Keeps a stalled LLM from ever holding up the paste.
 fn default_post_process_timeout_secs() -> u32 {
     10
+}
+
+pub fn default_post_process_min_duration_secs() -> u32 {
+    0
 }
 
 /// Default spoken activation phrase for "Generate with Flow".
@@ -4202,6 +4209,11 @@ fn ensure_post_process_defaults(settings: &mut AppSettings) -> bool {
         changed = true;
     }
 
+    if settings.post_process_min_duration_secs > 300 {
+        settings.post_process_min_duration_secs = 300;
+        changed = true;
+    }
+
     changed
 }
 
@@ -4410,6 +4422,7 @@ pub fn get_default_settings() -> AppSettings {
         post_process_custom_tones: Vec::new(),
         post_process_selected_tone_id: Some(DEFAULT_POST_PROCESS_TONE_ID.to_string()),
         post_process_timeout_secs: default_post_process_timeout_secs(),
+        post_process_min_duration_secs: default_post_process_min_duration_secs(),
         post_process_thinking: ThinkingLevel::default(),
         // Seeded rather than left None so `get_default_settings()` is a fixed
         // point of the repair pass below (several tests rely on that, and a
