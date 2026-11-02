@@ -725,6 +725,62 @@ async changeWhisperGpuDevice(device: number) : Promise<Result<null, string>> {
 async getAvailableAccelerators() : Promise<AvailableAccelerators> {
     return await TAURI_INVOKE("get_available_accelerators");
 },
+async setAppPromptRule(appName: string, promptId: string) : Promise<Result<null, string>> {
+    try {
+        return { status: "ok", data: await TAURI_INVOKE("set_app_prompt_rule", { appName, promptId }) };
+    } catch (e) {
+        if(e instanceof Error) throw e;
+        else return { status: "error", error: e as any };
+    }
+},
+async removeAppPromptRule(appName: string) : Promise<Result<null, string>> {
+    try {
+        return { status: "ok", data: await TAURI_INVOKE("remove_app_prompt_rule", { appName }) };
+    } catch (e) {
+        if(e instanceof Error) throw e;
+        else return { status: "error", error: e as any };
+    }
+},
+async getAppPromptRules() : Promise<Result<Record<string, string>, string>> {
+    try {
+        return { status: "ok", data: await TAURI_INVOKE("get_app_prompt_rules") };
+    } catch (e) {
+        if(e instanceof Error) throw e;
+        else return { status: "error", error: e as any };
+    }
+},
+async setHotwordCategory(category: string, words: string[]) : Promise<Result<null, string>> {
+    try {
+        return { status: "ok", data: await TAURI_INVOKE("set_hotword_category", { category, words }) };
+    } catch (e) {
+        if(e instanceof Error) throw e;
+        else return { status: "error", error: e as any };
+    }
+},
+async getHotwordCategories() : Promise<Result<Record<string, string[]>, string>> {
+    try {
+        return { status: "ok", data: await TAURI_INVOKE("get_hotword_categories") };
+    } catch (e) {
+        if(e instanceof Error) throw e;
+        else return { status: "error", error: e as any };
+    }
+},
+async changeWaveformStyleSetting(style: string) : Promise<Result<null, string>> {
+    try {
+        return { status: "ok", data: await TAURI_INVOKE("change_waveform_style_setting", { style }) };
+    } catch (e) {
+        if(e instanceof Error) throw e;
+        else return { status: "error", error: e as any };
+    }
+},
+async pingProviderTest(kind: string, providerId: string) : Promise<Result<number, string>> {
+    try {
+        return { status: "ok", data: await TAURI_INVOKE("ping_provider_test", { kind, providerId }) };
+    } catch (e) {
+        if(e instanceof Error) throw e;
+        else return { status: "error", error: e as any };
+    }
+},
 /**
  * Start key recording mode
  */
@@ -3673,7 +3729,7 @@ assistant_overlay_style?: OverlayStyle;
 /**
  * How long the finished live-transcription card stays up before leaving.
  */
-overlay_linger?: OverlayLinger; debug_mode?: boolean; log_level?: LogLevel; custom_words?: string[]; 
+overlay_linger?: OverlayLinger; debug_mode?: boolean; log_level?: LogLevel; custom_words?: string[]; app_prompt_rules?: Partial<{ [key in string]: string }>; hotword_categories?: Partial<{ [key in string]: string[] }>; waveform_style?: string; 
 /**
  * Offer to record when a call appears to be in progress.
  * 

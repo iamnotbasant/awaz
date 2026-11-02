@@ -73,6 +73,8 @@ import { WordCorrectionThreshold } from "@/components/settings/debug/WordCorrect
 import { PasteDelay } from "@/components/settings/debug/PasteDelay";
 import { RecordingBuffer } from "@/components/settings/debug/RecordingBuffer";
 import { ClamshellMicrophoneSelector } from "@/components/settings/ClamshellMicrophoneSelector";
+import { WaveformCustomizer } from "@/components/settings/sayit-matrix/WaveformCustomizer";
+import { ServerModeSection, WebDavSection } from "@/components/settings/sayit-matrix/D9DisabledSections";
 
 /**
  * The contents of each Settings tab. These are the preferences you set once and
@@ -92,6 +94,7 @@ export const GeneralTab: React.FC = () => {
           icon={SunMoon}
           tone="amber"
         />
+        <WaveformCustomizer grouped={true} />
         <TextSizeSelector grouped={true} icon={TypeIcon} tone="sky" />
         <AppLanguageSelector descriptionMode="tooltip" grouped={true} />
       </SettingsGroup>
@@ -315,6 +318,11 @@ export const AdvancedTab: React.FC = () => {
         <ExperimentalToggle descriptionMode="tooltip" grouped={true} />
       </SettingsGroup>
 
+      <SettingsGroup title={t("settings.advanced.groups.serverAndSync", { defaultValue: "Server & Cloud Sync" })}>
+        <ServerModeSection grouped={true} />
+        <WebDavSection grouped={true} />
+      </SettingsGroup>
+
       {experimentalEnabled && (
         <SettingsGroup
           title={t("settings.advanced.groups.experimental")}
@@ -332,7 +340,7 @@ export const AdvancedTab: React.FC = () => {
   );
 };
 
-const REPO_URL = "https://github.com/iamnotbasant/SpeakoFlow";
+const REPO_URL = "https://github.com/iamnotbasant/awaz";
 
 export const AboutTab: React.FC = () => {
   const { t } = useTranslation();

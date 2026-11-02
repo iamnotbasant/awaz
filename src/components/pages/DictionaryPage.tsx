@@ -8,6 +8,7 @@ import { SettingsGroup } from "@/components/ui/SettingsGroup";
 import { CustomWords } from "@/components/settings/CustomWords";
 import { AutoLearnCorrections } from "@/components/settings/AutoLearnCorrections";
 import { TextReplacements } from "@/components/settings/TextReplacements";
+import { CategorizedHotwords } from "@/components/settings/sayit-matrix/CategorizedHotwords";
 
 type DictionaryTab = "words" | "replacements";
 
@@ -56,6 +57,7 @@ export const DictionaryPage: React.FC = () => {
       <div className="mt-6">
         {tab === "words" ? (
           <div className="tab-reveal space-y-5">
+            <CategorizedHotwords />
             <CustomWords inputId={WORD_INPUT_ID} />
             <div className="rounded-2xl border border-hairline bg-surface elev-card">
               <AutoLearnCorrections grouped={true} />

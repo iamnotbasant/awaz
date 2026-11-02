@@ -268,6 +268,8 @@ const settingUpdaters: {
     commands.changeWhisperGpuDevice(value as number),
   extra_recording_buffer_ms: (value) =>
     commands.changeExtraRecordingBufferSetting(value as number),
+  waveform_style: (value) =>
+    commands.changeWaveformStyleSetting(value as string),
 };
 
 export const useSettingsStore = create<SettingsStore>()(

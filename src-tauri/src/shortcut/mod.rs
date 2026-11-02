@@ -1877,3 +1877,94 @@ pub async fn get_available_accelerators() -> crate::managers::transcription::Ava
         .await
         .expect("get_available_accelerators panicked")
 }
+
+#[tauri::command]
+#[specta::specta]
+pub fn set_app_prompt_rule(app: AppHandle, app_name: String, prompt_id: String) -> Result<(), String> {
+    let mut s = settings::get_settings(&app);
+    s.app_prompt_rules.insert(app_name, prompt_id);
+    settings::write_settings(&app, s);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn remove_app_prompt_rule(app: AppHandle, app_name: String) -> Result<(), String> {
+    let mut s = settings::get_settings(&app);
+    s.app_prompt_rules.remove(&app_name);
+    settings::write_settings(&app, s);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_app_prompt_rules(app: AppHandle) -> Result<HashMap<String, String>, String> {
+    let s = settings::get_settings(&app);
+    Ok(s.app_prompt_rules)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn set_hotword_category(app: AppHandle, category: String, words: Vec<String>) -> Result<(), String> {
+    let mut s = settings::get_settings(&app);
+    s.hotword_categories.insert(category, words);
+    let mut all_words = Vec::new();
+    for words in s.hotword_categories.values() {
+        all_words.extend(words.clone());
+    }
+    all_words.sort();
+    all_words.dedup();
+    s.custom_words = all_words;
+    settings::write_settings(&app, s);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_hotword_categories(app: AppHandle) -> Result<HashMap<String, Vec<String>>, String> {
+    let s = settings::get_settings(&app);
+    Ok(s.hotword_categories)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn change_waveform_style_setting(app: AppHandle, style: String) -> Result<(), String> {
+    let mut s = settings::get_settings(&app);
+    s.waveform_style = style;
+    settings::write_settings(&app, s);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn ping_provider_test(app: AppHandle, kind: String, provider_id: String) -> Result<u64, String> {
+    let start = std::time::Instant::now();
+    if kind == "stt" {
+        let mut s = settings::get_settings(&app);
+        s.cloud_stt_provider_id = provider_id;
+        let cfg = crate::stt_cloud::resolve_cloud_stt(&s)
+            .map_err(|e| format!("STT configuration error: {e:?}"))?;
+        tauri::async_runtime::spawn_blocking(move || crate::stt_cloud::verify_cloud_stt(&cfg))
+            .await
+            .map_err(|e| format!("Task failed: {e}"))?
+            .map_err(|e| format!("{e}"))?;
+        Ok(start.elapsed().as_millis() as u64)
+    } else if kind == "cleanup" {
+        let mut s = settings::get_settings(&app);
+        s.post_process_provider_id = provider_id;
+        let (provider, model, api_key, _) = settings::resolve_post_process_brain(&s)
+            .map_err(|e| format!("Cleanup configuration error: {e:?}"))?;
+        crate::llm_client::send_chat_completion(
+            &provider,
+            api_key,
+            &model,
+            "Reply with ok".to_string(),
+            None,
+            None,
+        ).await
+        .map_err(|e| format!("{e}"))?;
+        Ok(start.elapsed().as_millis() as u64)
+    } else {
+        Err(format!("Unknown provider test kind: {kind}"))
+    }
+}

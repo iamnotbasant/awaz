@@ -17,6 +17,7 @@ import { useModelSlots } from "@/components/shell/useModelSlots";
 import { LlmModelPicker } from "@/components/shell/ModelPicker";
 import { WritingStyleCard } from "./cleanup/WritingStyle";
 import { useCleanupSpecialist } from "./cleanup/useCleanupSpecialist";
+import { PromptPresetManager } from "@/components/settings/sayit-matrix/PromptPresetManager";
 
 /** The base cleanup prompt: long-form text, so it is edited in a window. */
 const InstructionsRow: React.FC = () => {
@@ -197,6 +198,10 @@ export const CleanupPage: React.FC = () => {
         </SettingContainer>
         <InstructionsRow />
       </SettingsGroup>
+
+      <div className="mt-8">
+        <PromptPresetManager />
+      </div>
 
       <section className="mt-10">
         <SectionTitle

@@ -13,6 +13,7 @@ import { PostProcessUnloadTimeout } from "@/components/settings/PostProcessUnloa
 import { AssistantSettings } from "@/components/settings/assistant/AssistantSettings";
 import { useNavigation, type ModelSlot } from "@/components/shell/navigation";
 import { useModelSlots } from "@/components/shell/useModelSlots";
+import { ProviderTestMatrix } from "@/components/settings/sayit-matrix/ProviderTestMatrix";
 
 /**
  * The content of each Models tab.
@@ -58,6 +59,8 @@ export const SpeechTab: React.FC = () => {
   return (
     <div className="space-y-9">
       <CloudTranscriptionGroup embedded section="setup" />
+
+      <ProviderTestMatrix />
 
       <SettingsGroup title={t("models.options")}>
         <CloudTranscriptionGroup embedded section="options" />
