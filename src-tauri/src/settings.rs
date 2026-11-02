@@ -6595,7 +6595,7 @@ mod tests {
         }
         assert!(shipped_post_process_prompt_text("prompt_123").is_none());
         assert_eq!(settings.theme, Theme::default());
-        assert_eq!(settings.theme, Theme::Light);
+        assert_eq!(settings.theme, Theme::Dark);
         assert_eq!(
             settings.post_process_selected_tone_id.as_deref(),
             Some(DEFAULT_POST_PROCESS_TONE_ID)

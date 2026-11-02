@@ -27,17 +27,16 @@
    * on <html> and the settings preview inline on this element; declaring them
    * here would shadow both. */
 
-  /* Graphite, tinted a hair toward the brand's own hue rather than toward warm.
-   * The previous brown-black is what made the whole surface read as yellowish. */
-  --as-surface: rgba(19, 22, 23, var(--as-alpha, 1));
+  /* Pure-black #000000 assistant surface with white text (Awaz 0.0.2 / P8) */
+  --as-surface: rgba(0, 0, 0, var(--as-alpha, 1));
   --as-panel-surface: var(--as-surface);
-  --as-chip-surface: rgba(21, 24, 25, calc(0.96 * var(--as-alpha, 1)));
-  --as-menu-surface: #1c2123;
-  --as-ink: #eef2f2;
-  --as-body: #d2d8d8;
-  --as-muted: #9ba5a6;
-  --as-faint: #6e797a;
-  --as-placeholder: #86908f;
+  --as-chip-surface: rgba(10, 10, 10, calc(0.96 * var(--as-alpha, 1)));
+  --as-menu-surface: #0a0a0a;
+  --as-ink: #ffffff;
+  --as-body: #e4e4e7;
+  --as-muted: #a1a1aa;
+  --as-faint: #71717a;
+  --as-placeholder: #a1a1aa;
   --as-hairline: rgba(255, 255, 255, 0.08);
   --as-hairline-strong: rgba(255, 255, 255, 0.14);
   --as-inner:

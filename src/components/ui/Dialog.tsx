@@ -168,7 +168,7 @@ export const Dialog: React.FC<DialogProps> = ({
     >
       <div
         aria-hidden="true"
-        className="dialog-scrim pointer-events-none absolute inset-0 bg-[rgb(10_20_24/0.42)] backdrop-blur-[3px]"
+        className="dialog-scrim pointer-events-none absolute inset-0 bg-black/60 backdrop-blur-[3px]"
       />
       <div
         ref={panelRef}

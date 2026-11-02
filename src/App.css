@@ -172,33 +172,34 @@
 }
 
 /* === Dark ===
- * A deep blue-green slate rather than near-black: the same faint teal tint as
- * the light theme, with each step lighter than the one under it (chrome →
- * pane → card → fill), because in the dark depth comes from lightness, not
- * shadow. The old ramp sat three near-identical blacks on top of each other,
- * so cards barely separated from the page and the whole window read as flat.
- *
- * Text is a step softer than white (13:1 on a card, not 17:1): light glyphs on
- * a dark ground bloom and look heavier than the same weight on paper, which is
- * also why the weights ease off a notch below. Every pairing stays above AA —
- * muted on a card 6.0:1, accent on a card 9.0:1. */
+ * Pure-black #000000 app-wide theme (Awaz 0.0.2 / P8).
+ * Pure black background (#000000), pure white primary text (#FFFFFF),
+ * with pitch-black chrome/title bar (#000000), deep cards (#0a0a0a),
+ * wells (#0d0d0d), and crisp zinc hairlines (#27272a).
+ */
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --color-canvas: #121a1c;
-  --color-canvas-soft: #0c1315;
-  --color-surface: #1a2326;
-  --color-surface-strong: #263134;
-  /* Lighter than a card, so a hovered row lifts instead of sinking. */
-  --color-surface-muted: #1e282b;
+  --color-canvas: #000000;
+  --color-canvas-soft: #000000;
+  --color-surface: #0a0a0a;
+  --color-surface-strong: #141414;
+  --color-surface-muted: #0d0d0d;
 
-  --color-ink: #e4ebeb;
-  --color-ink-soft: #d6dedf;
-  --color-body: #bfcacb;
-  --color-muted: #94a1a4;
-  --color-muted-soft: #5f6c6e;
+  --color-ink: #ffffff;
+  --color-ink-soft: #f4f4f5;
+  --color-body: #e4e4e7;
+  --color-muted: #a1a1aa;
+  --color-muted-soft: #71717a;
 
-  --color-hairline: #273133;
-  --color-hairline-strong: #354144;
+  --color-hairline: #27272a;
+  --color-hairline-strong: #3f3f46;
+
+  --color-hero-surface: #000000;
+  --color-hero-ink: #ffffff;
+  --color-hero-muted: #a1a1aa;
+  --color-hero-border: #27272a;
+  --color-hero-control: #141414;
+  --color-hero-hover: #ffffff17;
 
   --color-accent: #5cd6be;
   --color-accent-strong: #90e8d4;
@@ -209,19 +210,19 @@
   --color-warning: #f5a14a;
 
   --color-on-primary: #04241f;
-  --color-on-ink: #121a1c;
+  --color-on-ink: #000000;
 
   /* The deeper teal, not the mint: a white knob on mint disappeared. */
   --color-toggle-track-on: var(--color-accent-fill);
-  --color-toggle-track-off: #414d50;
+  --color-toggle-track-off: #27272a;
   --color-toggle-knob-on: #ffffff;
 
-  --color-background: var(--color-canvas);
-  --color-text: var(--color-ink);
+  --color-background: #000000;
+  --color-text: #ffffff;
   --color-background-ui: var(--color-accent);
   --color-logo-primary: var(--color-accent);
-  --color-logo-stroke: #d6dedf;
-  --color-mid-gray: #94a1a4;
+  --color-logo-stroke: #ffffff;
+  --color-mid-gray: #a1a1aa;
 
   /* Light-on-dark reads heavier, so every weight eases off a notch (Inter is
    * variable, so these are real weights, not synthesized). */
@@ -230,7 +231,7 @@
   --font-weight-bold: 660;
   font-weight: 380;
 
-  background-color: var(--color-canvas);
+  background-color: #000000;
 }
 :root[data-theme="dark"] .font-display {
   font-weight: 580;
@@ -241,25 +242,25 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
     color-scheme: dark;
-    --color-canvas: #121a1c;
-    --color-canvas-soft: #0c1315;
-    --color-surface: #1a2326;
-    --color-surface-strong: #263134;
-    --color-surface-muted: #1e282b;
-    --color-ink: #e4ebeb;
-    --color-ink-soft: #d6dedf;
-    --color-body: #bfcacb;
-    --color-muted: #94a1a4;
-    --color-muted-soft: #5f6c6e;
-    --color-hairline: #273133;
-    --color-hairline-strong: #354144;
+    --color-canvas: #000000;
+    --color-canvas-soft: #000000;
+    --color-surface: #0a0a0a;
+    --color-surface-strong: #141414;
+    --color-surface-muted: #0d0d0d;
+    --color-ink: #ffffff;
+    --color-ink-soft: #f4f4f5;
+    --color-body: #e4e4e7;
+    --color-muted: #a1a1aa;
+    --color-muted-soft: #71717a;
+    --color-hairline: #27272a;
+    --color-hairline-strong: #3f3f46;
     --color-accent: #5cd6be;
     --color-accent-strong: #90e8d4;
     --color-accent-fill: #1ea28f;
     --color-on-primary: #04241f;
-    --color-on-ink: #121a1c;
-    --color-background: var(--color-canvas);
-    --color-text: var(--color-ink);
+    --color-on-ink: #000000;
+    --color-background: #000000;
+    --color-text: #ffffff;
   }
 }
 
