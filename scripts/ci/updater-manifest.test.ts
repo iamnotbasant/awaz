@@ -25,7 +25,7 @@ const PUBKEY = conf.plugins.updater.pubkey;
 // to the exact format the Tauri CLI writes, not to our reading of the spec.
 const PAYLOAD = new TextEncoder().encode("hello awaz");
 const SIGNATURE =
-  "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSVGJMT04wbG9ocDZiR3phQ3M4ejFPYVdkK2xURzIzd1o5VzJkVUlkanZUcHllV3ByMTBnTnRSWkxPdGQrSWRVc0dJdkdNdDdKaFNNQmI5UlVDZmdIVU1aMVNYKzRVSndjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMTcxNTA3CWZpbGU6YXdhei1zaWduLXRlc3QuYmluCnBxa0F6Z0xMbjFROXZxbW5pZmtmc3FHRnU3cHFxcm5UZWE0eUFUQnFMWWZSOGlSb0lMZ3VwMTRkVnNKemsvTTRPNHNDMFJ2NkIwb291UEt5by9CRURnPT0K";
+  "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRRG53QUk5NWh5SW8vQzlZMEVXZ2UvVzI1UXhjTElNTlFEVFo1T1hha05hVkQ4YzlrcU91V2UxUmNOby82NWlTNFpUUnN4TGI0Z2tHYjI0aUtCWE5OR2hkRXlGTG1HN0FVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzNjIyMjk2CWZpbGU6YXdhei1zaWduLXZlY3Rvci5iaW4Kejk2VG5ub051TGhHbDVCdEVPWlVwV1VLL1l5aW4wTWJrUmRhSWM3SmF6TlBZMXl1aDZPaG5GeTNqU0x6SGtDTTdEZEZIVFppQUEwZG95akcxY1pYQnc9PQo=";
 
 // Upstream Handy's key, which this app shipped with until 2.0.0 and whose
 // private half we never had.
@@ -55,7 +55,7 @@ describe("verifyUpdaterSignature", () => {
   test("rejects an edited trusted comment", () => {
     const text = Buffer.from(SIGNATURE, "base64")
       .toString("utf8")
-      .replace("timestamp:1792171507", "timestamp:1792171508");
+      .replace(/timestamp:\d+/, "timestamp:9999999999");
     const forged = Buffer.from(text, "utf8").toString("base64");
     const result = verifyUpdaterSignature(PAYLOAD, forged, PUBKEY);
     expect(result.ok).toBe(false);
@@ -76,7 +76,7 @@ describe("the shipped config", () => {
 
   test("polls this repository's latest release", () => {
     expect(conf.plugins.updater.endpoints).toEqual([
-      "https://github.com/iamnotbasant/SpeakoFlow/releases/latest/download/latest.json",
+      "https://github.com/iamnotbasant/awaz/releases/latest/download/latest.json",
     ]);
   });
 });

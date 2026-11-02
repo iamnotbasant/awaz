@@ -66,7 +66,7 @@
   "plugins": {
     "updater": {
       "active": false,
-      "pubkey": "",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDIyNzI5OEY3MDgwMDlGMDMKUldRRG53QUk5NWh5SXBMN015dFcyTzhRckxteXdBL2ZxMnh4OTM5OEZ3UTdOU1hZVW5JV05wdW0K",
       "endpoints": [
         "https://github.com/iamnotbasant/awaz/releases/latest/download/latest.json"
       ]

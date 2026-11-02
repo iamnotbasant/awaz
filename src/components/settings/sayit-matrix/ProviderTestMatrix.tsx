@@ -1,6 +1,13 @@
+/* eslint-disable i18next/no-literal-string */
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Activity, CheckCircle, AlertCircle, Loader2, Play } from "lucide-react";
+import {
+  Activity,
+  CheckCircle,
+  AlertCircle,
+  Loader2,
+  Play,
+} from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
 import { commands } from "@/bindings";
@@ -62,7 +69,9 @@ const SHIPPED_TEST_PROVIDERS: ProviderStatus[] = [
 
 export const ProviderTestMatrix: React.FC = () => {
   const { t } = useTranslation();
-  const [providers, setProviders] = useState<ProviderStatus[]>(SHIPPED_TEST_PROVIDERS);
+  const [providers, setProviders] = useState<ProviderStatus[]>(
+    SHIPPED_TEST_PROVIDERS,
+  );
   const [isTestingAll, setIsTestingAll] = useState(false);
 
   const testSingleProvider = async (index: number) => {
@@ -70,7 +79,9 @@ export const ProviderTestMatrix: React.FC = () => {
     if (!target) return;
 
     setProviders((prev) =>
-      prev.map((p, i) => (i === index ? { ...p, state: "testing", error: undefined } : p))
+      prev.map((p, i) =>
+        i === index ? { ...p, state: "testing", error: undefined } : p,
+      ),
     );
 
     try {
@@ -78,14 +89,18 @@ export const ProviderTestMatrix: React.FC = () => {
       if (res.status === "ok") {
         setProviders((prev) =>
           prev.map((p, i) =>
-            i === index ? { ...p, state: "ok", latency: res.data, error: undefined } : p
-          )
+            i === index
+              ? { ...p, state: "ok", latency: res.data, error: undefined }
+              : p,
+          ),
         );
       } else {
         setProviders((prev) =>
           prev.map((p, i) =>
-            i === index ? { ...p, state: "error", error: res.error, latency: undefined } : p
-          )
+            i === index
+              ? { ...p, state: "error", error: res.error, latency: undefined }
+              : p,
+          ),
         );
       }
     } catch (err) {
@@ -93,8 +108,8 @@ export const ProviderTestMatrix: React.FC = () => {
         prev.map((p, i) =>
           i === index
             ? { ...p, state: "error", error: String(err), latency: undefined }
-            : p
-        )
+            : p,
+        ),
       );
     }
   };
@@ -114,7 +129,9 @@ export const ProviderTestMatrix: React.FC = () => {
           <div className="flex items-center gap-2">
             <Activity className="h-4 w-4 text-accent" />
             <h3 className="font-semibold text-ink text-sm">
-              {t("settings.providers.matrixTitle", { defaultValue: "Provider Grid & Latency Benchmarks" })}
+              {t("settings.providers.matrixTitle", {
+                defaultValue: "Provider Grid & Latency Benchmarks",
+              })}
             </h3>
           </div>
           <p className="mt-1 text-xs text-muted">
@@ -135,7 +152,9 @@ export const ProviderTestMatrix: React.FC = () => {
           ) : (
             <Play className="h-3.5 w-3.5 fill-current" />
           )}
-          {t("settings.providers.testAll", { defaultValue: "Test All Providers" })}
+          {t("settings.providers.testAll", {
+            defaultValue: "Test All Providers",
+          })}
         </Button>
       </div>
 
@@ -152,7 +171,9 @@ export const ProviderTestMatrix: React.FC = () => {
                     {p.kind === "stt" ? "ASR" : "Cleanup"}
                   </span>
                   <span className="text-xs text-hairline-strong">•</span>
-                  <span className="text-sm font-medium text-ink">{p.label}</span>
+                  <span className="text-sm font-medium text-ink">
+                    {p.label}
+                  </span>
                 </div>
                 <p className="mt-0.5 font-mono text-xs text-muted">{p.model}</p>
               </div>
@@ -160,13 +181,17 @@ export const ProviderTestMatrix: React.FC = () => {
               <div>
                 {p.state === "idle" && (
                   <Badge variant="outline">
-                    {t("settings.providers.untested", { defaultValue: "Untested" })}
+                    {t("settings.providers.untested", {
+                      defaultValue: "Untested",
+                    })}
                   </Badge>
                 )}
                 {p.state === "testing" && (
                   <Badge variant="active" className="gap-1">
                     <Loader2 className="h-3 w-3 animate-spin" />
-                    {t("settings.providers.testing", { defaultValue: "Testing..." })}
+                    {t("settings.providers.testing", {
+                      defaultValue: "Testing...",
+                    })}
                   </Badge>
                 )}
                 {p.state === "ok" && (
@@ -178,14 +203,19 @@ export const ProviderTestMatrix: React.FC = () => {
                 {p.state === "error" && (
                   <Badge variant="error" className="gap-1" title={p.error}>
                     <AlertCircle className="h-3 w-3" />
-                    {t("settings.providers.notWorking", { defaultValue: "Not working" })}
+                    {t("settings.providers.notWorking", {
+                      defaultValue: "Not working",
+                    })}
                   </Badge>
                 )}
               </div>
             </div>
 
             {p.state === "error" && p.error && (
-              <p className="mt-2 text-[11px] text-error line-clamp-2" title={p.error}>
+              <p
+                className="mt-2 text-[11px] text-error line-clamp-2"
+                title={p.error}
+              >
                 {p.error}
               </p>
             )}

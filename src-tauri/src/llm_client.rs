@@ -2636,17 +2636,37 @@ mod tests {
         let cleaned = "Bhai yeh file bhej do aur kal subah milte hain.";
 
         // Rule 2: Strictly Roman script - NEVER Devanagari
-        let has_devanagari = cleaned.chars().any(|c| ('\u{0900}'..='\u{097F}').contains(&c));
-        assert!(!has_devanagari, "Output contains Devanagari characters: {cleaned}");
+        let has_devanagari = cleaned
+            .chars()
+            .any(|c| ('\u{0900}'..='\u{097F}').contains(&c));
+        assert!(
+            !has_devanagari,
+            "Output contains Devanagari characters: {cleaned}"
+        );
 
         // Rule 2 & 4: Preserve Hindi words (no translation), retain conversational markers like 'bhai'
-        assert!(cleaned.to_lowercase().contains("bhai"), "Conversational marker 'bhai' was dropped");
-        assert!(cleaned.to_lowercase().contains("yeh file bhej do"), "Hindi words translated instead of preserved");
-        assert!(cleaned.to_lowercase().contains("kal subah milte hain"), "Hindi words translated instead of preserved");
+        assert!(
+            cleaned.to_lowercase().contains("bhai"),
+            "Conversational marker 'bhai' was dropped"
+        );
+        assert!(
+            cleaned.to_lowercase().contains("yeh file bhej do"),
+            "Hindi words translated instead of preserved"
+        );
+        assert!(
+            cleaned.to_lowercase().contains("kal subah milte hain"),
+            "Hindi words translated instead of preserved"
+        );
 
         // Rule 4: Fillers stripped
-        assert!(!cleaned.split_whitespace().any(|w| w.to_lowercase() == "um"), "Filler 'um' was not removed");
-        assert!(!cleaned.split_whitespace().any(|w| w.to_lowercase() == "ah"), "Filler 'ah' was not removed");
+        assert!(
+            !cleaned.split_whitespace().any(|w| w.to_lowercase() == "um"),
+            "Filler 'um' was not removed"
+        );
+        assert!(
+            !cleaned.split_whitespace().any(|w| w.to_lowercase() == "ah"),
+            "Filler 'ah' was not removed"
+        );
     }
 
     #[test]
@@ -2665,7 +2685,10 @@ mod tests {
         assert_eq!(lines[3], "4. Adrak");
 
         for ordinal in ["first", "second", "third", "fourth", "pehla", "doosra"] {
-            assert!(!cleaned.to_lowercase().contains(ordinal), "Ordinal '{ordinal}' was not removed");
+            assert!(
+                !cleaned.to_lowercase().contains(ordinal),
+                "Ordinal '{ordinal}' was not removed"
+            );
         }
     }
 
@@ -2688,13 +2711,20 @@ mod tests {
     #[test]
     fn test_acceptance_4_selection_edit_grammar_shorten() {
         // Selection-Edit: Grammar fix + shorten
-        let selected_text = "We was wanting to discuss about the problems and issues regarding the project status";
+        let selected_text =
+            "We was wanting to discuss about the problems and issues regarding the project status";
         let _instruction = "Is ki grammar fix kar do aur chhota kar do";
         // Prompt B fixture output
         let replacement = "We wanted to discuss project status issues.";
 
-        assert!(replacement.len() < selected_text.len(), "Text was not shortened");
-        assert!(!replacement.to_lowercase().contains("we was"), "Grammar error was not fixed");
+        assert!(
+            replacement.len() < selected_text.len(),
+            "Text was not shortened"
+        );
+        assert!(
+            !replacement.to_lowercase().contains("we was"),
+            "Grammar error was not fixed"
+        );
         assert!(!replacement.contains("Here is"));
         assert_eq!(replacement, "We wanted to discuss project status issues.");
     }
@@ -2708,7 +2738,10 @@ mod tests {
 
         // Rule 3: Preserve technical terminology, programming languages, and brand/software names in proper casing
         for term in ["Premiere Pro", "GitHub", "PR", "API"] {
-            assert!(cleaned.contains(term), "Technical term '{term}' was not properly preserved or cased");
+            assert!(
+                cleaned.contains(term),
+                "Technical term '{term}' was not properly preserved or cased"
+            );
         }
     }
 }

@@ -2,8 +2,8 @@ use crate::audio_toolkit::{apply_custom_words, filter_transcription_output, norm
 use crate::managers::audio::AudioRecordingManager;
 use crate::managers::model::{EngineType, ModelManager};
 use crate::settings::{
-    get_settings, ModelUnloadTimeout, OrtAcceleratorSetting, ResolvedCloudStt,
-    SttEngineMode, WhisperAcceleratorSetting,
+    get_settings, ModelUnloadTimeout, OrtAcceleratorSetting, ResolvedCloudStt, SttEngineMode,
+    WhisperAcceleratorSetting,
 };
 use anyhow::Result;
 use log::{debug, error, info, warn};
@@ -1061,7 +1061,10 @@ impl TranscriptionManager {
                     let mut cloud_settings = get_settings(&self.app_handle);
                     cloud_settings.stt_engine_mode = SttEngineMode::Cloud;
                     if let Ok(cfg) = crate::stt_cloud::resolve_cloud_stt(&cloud_settings) {
-                        warn!("Local model not loaded. Attempting cloud STT fallback: {}", cfg.provider.label);
+                        warn!(
+                            "Local model not loaded. Attempting cloud STT fallback: {}",
+                            cfg.provider.label
+                        );
                         if let Ok(raw) = crate::stt_cloud::transcribe_cloud_blocking(&cfg, &audio) {
                             let finished = self.finish_transcription(
                                 &cloud_settings,

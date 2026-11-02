@@ -1,3 +1,4 @@
+/* eslint-disable i18next/no-literal-string */
 import React, { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Plus, Trash2, Check, AppWindow, Sparkles } from "lucide-react";
@@ -13,7 +14,8 @@ export const PromptPresetManager: React.FC = () => {
   const { t } = useTranslation();
   const { getSetting, updateSetting, refreshSettings } = useSettings();
   const prompts = getSetting("post_process_prompts") || [];
-  const selectedPromptId = getSetting("post_process_selected_prompt_id") || "hinglish_roman";
+  const selectedPromptId =
+    getSetting("post_process_selected_prompt_id") || "hinglish_roman";
 
   const [appRules, setAppRules] = useState<Record<string, string>>({});
   const [newAppName, setNewAppName] = useState("");
@@ -41,7 +43,11 @@ export const PromptPresetManager: React.FC = () => {
       const res = await commands.setPostProcessSelectedPrompt(id);
       if (res.status === "ok") {
         await refreshSettings();
-        toast.success(t("settings.presets.switched", { defaultValue: "Switched cleanup preset" }));
+        toast.success(
+          t("settings.presets.switched", {
+            defaultValue: "Switched cleanup preset",
+          }),
+        );
       }
     } catch (err) {
       toast.error(String(err));
@@ -56,7 +62,11 @@ export const PromptPresetManager: React.FC = () => {
     try {
       const res = await commands.setAppPromptRule(cleanApp, newAppPresetId);
       if (res.status === "ok") {
-        toast.success(t("settings.presets.ruleAdded", { defaultValue: `Rule added for ${cleanApp}` }));
+        toast.success(
+          t("settings.presets.ruleAdded", {
+            defaultValue: `Rule added for ${cleanApp}`,
+          }),
+        );
         setNewAppName("");
         await loadRules();
       }
@@ -72,7 +82,11 @@ export const PromptPresetManager: React.FC = () => {
       const res = await commands.removeAppPromptRule(appName);
       if (res.status === "ok") {
         await loadRules();
-        toast.success(t("settings.presets.ruleRemoved", { defaultValue: `Removed rule for ${appName}` }));
+        toast.success(
+          t("settings.presets.ruleRemoved", {
+            defaultValue: `Removed rule for ${appName}`,
+          }),
+        );
       }
     } catch (err) {
       toast.error(String(err));
@@ -91,7 +105,9 @@ export const PromptPresetManager: React.FC = () => {
         <div className="flex items-center gap-2 border-b border-hairline pb-3">
           <Sparkles className="h-4 w-4 text-accent" />
           <h3 className="font-semibold text-ink text-sm">
-            {t("settings.presets.title", { defaultValue: "AI Cleanup Presets" })}
+            {t("settings.presets.title", {
+              defaultValue: "AI Cleanup Presets",
+            })}
           </h3>
         </div>
 
@@ -111,9 +127,14 @@ export const PromptPresetManager: React.FC = () => {
               >
                 <div className="min-w-0 pr-2">
                   <div className="flex items-center gap-2">
-                    <span className="font-medium text-sm text-ink truncate">{preset.name}</span>
+                    <span className="font-medium text-sm text-ink truncate">
+                      {preset.name}
+                    </span>
                     {preset.id === "hinglish_roman" && (
-                      <Badge variant="active" className="text-[10px] py-0 px-1.5">
+                      <Badge
+                        variant="active"
+                        className="text-[10px] py-0 px-1.5"
+                      >
                         Default
                       </Badge>
                     )}
@@ -139,7 +160,9 @@ export const PromptPresetManager: React.FC = () => {
           <div className="flex items-center gap-2">
             <AppWindow className="h-4 w-4 text-accent" />
             <h3 className="font-semibold text-ink text-sm">
-              {t("settings.presets.appRulesTitle", { defaultValue: "Per-Application Rules" })}
+              {t("settings.presets.appRulesTitle", {
+                defaultValue: "Per-Application Rules",
+              })}
             </h3>
           </div>
           <p className="mt-1 text-xs text-muted">
@@ -154,7 +177,9 @@ export const PromptPresetManager: React.FC = () => {
         <div className="space-y-2">
           {Object.keys(appRules).length === 0 ? (
             <p className="py-2 text-xs text-muted">
-              {t("settings.presets.noRules", { defaultValue: "No application rules configured yet." })}
+              {t("settings.presets.noRules", {
+                defaultValue: "No application rules configured yet.",
+              })}
             </p>
           ) : (
             Object.entries(appRules).map(([appName, rulePresetId]) => {
@@ -165,7 +190,9 @@ export const PromptPresetManager: React.FC = () => {
                   className="flex items-center justify-between rounded-lg border border-hairline bg-surface-muted px-3 py-2 text-sm"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs font-semibold text-ink">{appName}</span>
+                    <span className="font-mono text-xs font-semibold text-ink">
+                      {appName}
+                    </span>
                     <span className="text-muted">➔</span>
                     <span className="text-xs text-muted-soft">
                       {matchedPreset?.name ?? rulePresetId}

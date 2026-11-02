@@ -30,7 +30,11 @@ describe("Slice 4: SayIt Settings Matrix", () => {
       expect(ok.latency).toBe(240);
 
       // Transition to error (e.g. 404 or bad API key)
-      const err = { ...p, state: "error" as ProviderState, error: "HTTP 401 Unauthorized" };
+      const err = {
+        ...p,
+        state: "error" as ProviderState,
+        error: "HTTP 401 Unauthorized",
+      };
       expect(err.state).toBe("error");
       expect(err.error).toContain("401");
     });

@@ -578,12 +578,14 @@ const settings: Json = {
     {
       id: "hinglish_roman",
       name: "Hinglish Roman (recommended)",
-      prompt: "You are an expert real-time voice-dictation post-processor. Your sole job is to clean and format raw speech-to-text transcripts into clean, readable Hinglish text.",
+      prompt:
+        "You are an expert real-time voice-dictation post-processor. Your sole job is to clean and format raw speech-to-text transcripts into clean, readable Hinglish text.",
     },
     {
       id: "selection_edit",
       name: "Selection-Edit (Context Awareness)",
-      prompt: "You are a \"selected text editor\". Your task is NOT normal ASR cleanup. Edit the selected text according to the user's spoken instruction.",
+      prompt:
+        'You are a "selected text editor". Your task is NOT normal ASR cleanup. Edit the selected text according to the user\'s spoken instruction.',
     },
     {
       id: "speakoflow_readable",

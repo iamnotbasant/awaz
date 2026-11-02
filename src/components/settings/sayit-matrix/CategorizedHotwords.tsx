@@ -48,7 +48,11 @@ export const CategorizedHotwords: React.FC = () => {
 
     const currentWords = categoriesMap[activeCategory] || [];
     if (currentWords.some((w) => w.toLowerCase() === word.toLowerCase())) {
-      toast.error(t("settings.hotwords.duplicate", { defaultValue: `"${word}" already exists in ${activeCategory}` }));
+      toast.error(
+        t("settings.hotwords.duplicate", {
+          defaultValue: `"${word}" already exists in ${activeCategory}`,
+        }),
+      );
       return;
     }
 
@@ -58,7 +62,11 @@ export const CategorizedHotwords: React.FC = () => {
       if (res.status === "ok") {
         setCategoriesMap((prev) => ({ ...prev, [activeCategory]: updated }));
         setNewWord("");
-        toast.success(t("settings.hotwords.added", { defaultValue: `Added "${word}" to ${activeCategory}` }));
+        toast.success(
+          t("settings.hotwords.added", {
+            defaultValue: `Added "${word}" to ${activeCategory}`,
+          }),
+        );
       }
     } catch (err) {
       toast.error(String(err));
@@ -87,7 +95,9 @@ export const CategorizedHotwords: React.FC = () => {
           <div className="flex items-center gap-2">
             <Tag className="h-4 w-4 text-accent" />
             <h3 className="font-semibold text-ink text-sm">
-              {t("settings.hotwords.title", { defaultValue: "Categorized Hotwords & Vocabulary" })}
+              {t("settings.hotwords.title", {
+                defaultValue: "Categorized Hotwords & Vocabulary",
+              })}
             </h3>
           </div>
           <p className="mt-1 text-xs text-muted">
@@ -172,7 +182,9 @@ export const CategorizedHotwords: React.FC = () => {
       <div className="pt-3 border-t border-hairline">
         <ToggleSwitch
           checked={sendHotwordsToAi}
-          onChange={(val) => void updateSetting("cloud_stt_send_custom_words", val)}
+          onChange={(val) =>
+            void updateSetting("cloud_stt_send_custom_words", val)
+          }
           isUpdating={isUpdating("cloud_stt_send_custom_words")}
           label={t("settings.hotwords.sendToAiPrompt", {
             defaultValue: "Send hotwords to AI prompt & STT native biasing",

@@ -1880,7 +1880,11 @@ pub async fn get_available_accelerators() -> crate::managers::transcription::Ava
 
 #[tauri::command]
 #[specta::specta]
-pub fn set_app_prompt_rule(app: AppHandle, app_name: String, prompt_id: String) -> Result<(), String> {
+pub fn set_app_prompt_rule(
+    app: AppHandle,
+    app_name: String,
+    prompt_id: String,
+) -> Result<(), String> {
     let mut s = settings::get_settings(&app);
     s.app_prompt_rules.insert(app_name, prompt_id);
     settings::write_settings(&app, s);
@@ -1905,7 +1909,11 @@ pub fn get_app_prompt_rules(app: AppHandle) -> Result<HashMap<String, String>, S
 
 #[tauri::command]
 #[specta::specta]
-pub fn set_hotword_category(app: AppHandle, category: String, words: Vec<String>) -> Result<(), String> {
+pub fn set_hotword_category(
+    app: AppHandle,
+    category: String,
+    words: Vec<String>,
+) -> Result<(), String> {
     let mut s = settings::get_settings(&app);
     s.hotword_categories.insert(category, words);
     let mut all_words = Vec::new();
@@ -1937,7 +1945,11 @@ pub fn change_waveform_style_setting(app: AppHandle, style: String) -> Result<()
 
 #[tauri::command]
 #[specta::specta]
-pub async fn ping_provider_test(app: AppHandle, kind: String, provider_id: String) -> Result<u64, String> {
+pub async fn ping_provider_test(
+    app: AppHandle,
+    kind: String,
+    provider_id: String,
+) -> Result<u64, String> {
     let start = std::time::Instant::now();
     if kind == "stt" {
         let mut s = settings::get_settings(&app);
@@ -1961,7 +1973,8 @@ pub async fn ping_provider_test(app: AppHandle, kind: String, provider_id: Strin
             "Reply with ok".to_string(),
             None,
             None,
-        ).await
+        )
+        .await
         .map_err(|e| format!("{e}"))?;
         Ok(start.elapsed().as_millis() as u64)
     } else {

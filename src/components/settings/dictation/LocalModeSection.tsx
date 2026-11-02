@@ -1,6 +1,14 @@
+/* eslint-disable i18next/no-literal-string */
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { Cpu, Cloud, AlertTriangle, ShieldCheck, Download, HardDrive } from "lucide-react";
+import {
+  Cpu,
+  Cloud,
+  AlertTriangle,
+  ShieldCheck,
+  Download,
+  HardDrive,
+} from "lucide-react";
 import { toast } from "sonner";
 import { SettingContainer } from "@/components/ui/SettingContainer";
 import { Segmented } from "@/components/ui/Segmented";
@@ -14,7 +22,8 @@ export const LocalModeSection: React.FC = () => {
   const { t } = useTranslation();
   const { getSetting, refreshSettings } = useSettings();
 
-  const currentMode = (getSetting("stt_engine_mode") ?? "cloud") as SttEngineMode;
+  const currentMode = (getSetting("stt_engine_mode") ??
+    "cloud") as SttEngineMode;
   const isLocal = currentMode === "local";
 
   const handleModeChange = async (mode: string) => {
@@ -23,8 +32,12 @@ export const LocalModeSection: React.FC = () => {
       await refreshSettings();
       toast.success(
         mode === "local"
-          ? t("settings.engine.switchedLocal", { defaultValue: "Switched to Local Offline Mode (Parakeet CPU)" })
-          : t("settings.engine.switchedCloud", { defaultValue: "Switched to Cloud API Mode (Gemini/Groq)" })
+          ? t("settings.engine.switchedLocal", {
+              defaultValue: "Switched to Local Offline Mode (Parakeet CPU)",
+            })
+          : t("settings.engine.switchedCloud", {
+              defaultValue: "Switched to Cloud API Mode (Gemini/Groq)",
+            }),
       );
     } catch (err) {
       toast.error(String(err));
@@ -34,7 +47,9 @@ export const LocalModeSection: React.FC = () => {
   return (
     <div className="space-y-4">
       <SettingContainer
-        title={t("settings.engine.modeTitle", { defaultValue: "Speech Recognition Engine" })}
+        title={t("settings.engine.modeTitle", {
+          defaultValue: "Speech Recognition Engine",
+        })}
         description={t("settings.engine.modeDesc", {
           defaultValue:
             "Choose between Cloud API transcription (fast, multilingual, native Hinglish Roman) or Local Mode (private, offline CPU inference).",
@@ -44,17 +59,23 @@ export const LocalModeSection: React.FC = () => {
         grouped={true}
       >
         <Segmented
-          label={t("settings.engine.modeTitle", { defaultValue: "Speech Engine" })}
+          label={t("settings.engine.modeTitle", {
+            defaultValue: "Speech Engine",
+          })}
           value={currentMode}
           onChange={handleModeChange}
           options={[
             {
               value: "cloud",
-              label: t("settings.engine.cloud", { defaultValue: "Cloud API Mode (Recommended)" }),
+              label: t("settings.engine.cloud", {
+                defaultValue: "Cloud API Mode (Recommended)",
+              }),
             },
             {
               value: "local",
-              label: t("settings.engine.local", { defaultValue: "Local Mode (Offline CPU)" }),
+              label: t("settings.engine.local", {
+                defaultValue: "Local Mode (Offline CPU)",
+              }),
             },
           ]}
         />
@@ -84,11 +105,15 @@ export const LocalModeSection: React.FC = () => {
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
-                  <h4 className="font-semibold text-sm text-ink">Parakeet Unified EN 0.6B</h4>
+                  <h4 className="font-semibold text-sm text-ink">
+                    Parakeet Unified EN 0.6B
+                  </h4>
                   <Badge variant="success">Recommended for CPU</Badge>
                 </div>
                 <p className="mt-1 text-xs text-muted">
-                  Lightweight on-demand download (~150MB GGUF). High-speed CPU inference with AVX2/FMA kernels. Fits comfortably within 8GB RAM envelope.
+                  Lightweight on-demand download (~150MB GGUF). High-speed CPU
+                  inference with AVX2/FMA kernels. Fits comfortably within 8GB
+                  RAM envelope.
                 </p>
                 <div className="mt-2 flex items-center gap-4 text-[11px] text-muted">
                   <span className="flex items-center gap-1">
@@ -105,7 +130,9 @@ export const LocalModeSection: React.FC = () => {
               <Button
                 size="sm"
                 variant="secondary"
-                onClick={() => toast.info("Parakeet 0.6B is ready for local CPU inference")}
+                onClick={() =>
+                  toast.info("Parakeet 0.6B is ready for local CPU inference")
+                }
                 className="gap-1.5 text-xs"
               >
                 <Download className="h-3.5 w-3.5" />
@@ -119,11 +146,15 @@ export const LocalModeSection: React.FC = () => {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
-                  <h4 className="font-semibold text-sm text-ink">Heavy Multilingual Models (1.7B - 2.5B)</h4>
+                  <h4 className="font-semibold text-sm text-ink">
+                    Heavy Multilingual Models (1.7B - 2.5B)
+                  </h4>
                   <Badge variant="warning">Hardware Constrained</Badge>
                 </div>
                 <p className="mt-1 text-xs text-muted">
-                  Nemotron 3.5, Qwen3-ASR 1.7B, and Canary 2.5B require 16GB+ RAM and dedicated GPU. Disabled to prevent memory thrashing on 8GB shared RAM machines.
+                  Nemotron 3.5, Qwen3-ASR 1.7B, and Canary 2.5B require 16GB+
+                  RAM and dedicated GPU. Disabled to prevent memory thrashing on
+                  8GB shared RAM machines.
                 </p>
               </div>
 

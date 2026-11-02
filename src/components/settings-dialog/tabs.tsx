@@ -74,7 +74,10 @@ import { PasteDelay } from "@/components/settings/debug/PasteDelay";
 import { RecordingBuffer } from "@/components/settings/debug/RecordingBuffer";
 import { ClamshellMicrophoneSelector } from "@/components/settings/ClamshellMicrophoneSelector";
 import { WaveformCustomizer } from "@/components/settings/sayit-matrix/WaveformCustomizer";
-import { ServerModeSection, WebDavSection } from "@/components/settings/sayit-matrix/D9DisabledSections";
+import {
+  ServerModeSection,
+  WebDavSection,
+} from "@/components/settings/sayit-matrix/D9DisabledSections";
 
 /**
  * The contents of each Settings tab. These are the preferences you set once and
@@ -318,7 +321,11 @@ export const AdvancedTab: React.FC = () => {
         <ExperimentalToggle descriptionMode="tooltip" grouped={true} />
       </SettingsGroup>
 
-      <SettingsGroup title={t("settings.advanced.groups.serverAndSync", { defaultValue: "Server & Cloud Sync" })}>
+      <SettingsGroup
+        title={t("settings.advanced.groups.serverAndSync", {
+          defaultValue: "Server & Cloud Sync",
+        })}
+      >
         <ServerModeSection grouped={true} />
         <WebDavSection grouped={true} />
       </SettingsGroup>

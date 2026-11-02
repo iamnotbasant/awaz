@@ -2760,7 +2760,9 @@ fn default_model_for_provider(provider_id: &str) -> String {
     match provider_id {
         "groq" => "openai/gpt-oss-20b".to_string(),
         "gemini" => "gemini-3-flash-preview".to_string(),
-        id if id == APPLE_INTELLIGENCE_PROVIDER_ID => APPLE_INTELLIGENCE_DEFAULT_MODEL_ID.to_string(),
+        id if id == APPLE_INTELLIGENCE_PROVIDER_ID => {
+            APPLE_INTELLIGENCE_DEFAULT_MODEL_ID.to_string()
+        }
         _ => String::new(),
     }
 }
@@ -4046,7 +4048,9 @@ fn ensure_post_process_defaults(settings: &mut AppSettings) -> bool {
             }
         }
         None => {
-            settings.post_process_prompts.insert(0, hinglish_roman_prompt());
+            settings
+                .post_process_prompts
+                .insert(0, hinglish_roman_prompt());
             changed = true;
         }
     }
@@ -4064,21 +4068,35 @@ fn ensure_post_process_defaults(settings: &mut AppSettings) -> bool {
             }
         }
         None => {
-            settings.post_process_prompts.insert(1, selection_edit_prompt());
+            settings
+                .post_process_prompts
+                .insert(1, selection_edit_prompt());
             changed = true;
         }
     }
 
     // Seed "Formal English", "Concise Notes", and "Verbatim" presets for Awaz 0.0.1.
-    if !settings.post_process_prompts.iter().any(|p| p.id == FORMAL_ENGLISH_PROMPT_ID) {
+    if !settings
+        .post_process_prompts
+        .iter()
+        .any(|p| p.id == FORMAL_ENGLISH_PROMPT_ID)
+    {
         settings.post_process_prompts.push(formal_english_prompt());
         changed = true;
     }
-    if !settings.post_process_prompts.iter().any(|p| p.id == CONCISE_NOTES_PROMPT_ID) {
+    if !settings
+        .post_process_prompts
+        .iter()
+        .any(|p| p.id == CONCISE_NOTES_PROMPT_ID)
+    {
         settings.post_process_prompts.push(concise_notes_prompt());
         changed = true;
     }
-    if !settings.post_process_prompts.iter().any(|p| p.id == VERBATIM_PROMPT_ID) {
+    if !settings
+        .post_process_prompts
+        .iter()
+        .any(|p| p.id == VERBATIM_PROMPT_ID)
+    {
         settings.post_process_prompts.push(verbatim_prompt());
         changed = true;
     }
@@ -4883,12 +4901,13 @@ pub(crate) fn resolve_post_process_config(
                 provider_label: None,
             });
         }
-        let prompt_text = if prompt.id == HINGLISH_ROMAN_PROMPT_ID && !settings.cloud_stt_no_verbatim {
-            // Decision D12: cloud_stt_no_verbatim OFF (verbatim wanted) -> verbatim variant without filler-strip lines
-            hinglish_roman_verbatim_prompt_text().to_string()
-        } else {
-            prompt.prompt.clone()
-        };
+        let prompt_text =
+            if prompt.id == HINGLISH_ROMAN_PROMPT_ID && !settings.cloud_stt_no_verbatim {
+                // Decision D12: cloud_stt_no_verbatim OFF (verbatim wanted) -> verbatim variant without filler-strip lines
+                hinglish_roman_verbatim_prompt_text().to_string()
+            } else {
+                prompt.prompt.clone()
+            };
         (prompt.id.clone(), prompt_text)
     };
 
