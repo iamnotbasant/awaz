@@ -18,6 +18,7 @@ import { LlmModelPicker } from "@/components/shell/ModelPicker";
 import { WritingStyleCard } from "./cleanup/WritingStyle";
 import { useCleanupSpecialist } from "./cleanup/useCleanupSpecialist";
 import { PromptPresetManager } from "@/components/settings/sayit-matrix/PromptPresetManager";
+import { ContextAwareCard } from "@/components/settings/sayit-matrix/ContextAwareCard";
 
 /** The base cleanup prompt: long-form text, so it is edited in a window. */
 const InstructionsRow: React.FC = () => {
@@ -261,6 +262,10 @@ export const CleanupPage: React.FC = () => {
         </SettingContainer>
         <InstructionsRow />
       </SettingsGroup>
+
+      <div className="mt-6">
+        <ContextAwareCard />
+      </div>
 
       <div className="mt-8">
         <PromptPresetManager />

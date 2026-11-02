@@ -238,6 +238,10 @@ const settingUpdaters: {
     commands.changePostProcessTimeoutSetting(value as number),
   post_process_min_duration_secs: (value) =>
     commands.changePostProcessMinDurationSecsSetting(value as number),
+  context_awareness_enabled: (value) =>
+    commands.changeContextAwarenessEnabledSetting(value as boolean),
+  context_selection_model: (value) =>
+    commands.changeContextSelectionModelSetting(value as string),
   post_process_thinking: (value) =>
     commands.changePostProcessThinkingSetting(value as ThinkingLevel),
   assistant_thinking: (value) =>

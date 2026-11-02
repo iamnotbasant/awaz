@@ -1541,6 +1541,13 @@ pub struct AppSettings {
     /// Skip cleanup for speech shorter than this many seconds (0 = always cleans up).
     #[serde(default = "default_post_process_min_duration_secs")]
     pub post_process_min_duration_secs: u32,
+    /// Enable context awareness: when text is selected in the active application,
+    /// dictating speaks an instruction to edit/rewrite the selection.
+    #[serde(default = "default_context_awareness_enabled")]
+    pub context_awareness_enabled: bool,
+    /// Model to use for selection edits (empty means "Current AI service").
+    #[serde(default = "default_context_selection_model")]
+    pub context_selection_model: String,
     /// How much a reasoning model may think before cleaning a dictation. See
     /// [`ThinkingLevel`]; `Off` keeps cleanup on its fast path.
     #[serde(default)]
@@ -2099,6 +2106,14 @@ fn default_post_process_timeout_secs() -> u32 {
 
 pub fn default_post_process_min_duration_secs() -> u32 {
     0
+}
+
+pub fn default_context_awareness_enabled() -> bool {
+    true
+}
+
+pub fn default_context_selection_model() -> String {
+    String::new()
 }
 
 /// Default spoken activation phrase for "Generate with Flow".
@@ -4423,6 +4438,8 @@ pub fn get_default_settings() -> AppSettings {
         post_process_selected_tone_id: Some(DEFAULT_POST_PROCESS_TONE_ID.to_string()),
         post_process_timeout_secs: default_post_process_timeout_secs(),
         post_process_min_duration_secs: default_post_process_min_duration_secs(),
+        context_awareness_enabled: default_context_awareness_enabled(),
+        context_selection_model: default_context_selection_model(),
         post_process_thinking: ThinkingLevel::default(),
         // Seeded rather than left None so `get_default_settings()` is a fixed
         // point of the repair pass below (several tests rely on that, and a

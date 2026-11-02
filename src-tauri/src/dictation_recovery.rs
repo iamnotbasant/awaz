@@ -58,12 +58,14 @@ impl OfferKind {
 }
 
 /// What a dictation needs to be finished the way it would have been.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DictationContext {
     /// AI cleanup runs on it.
     pub post_process: bool,
     /// It came from the dictation shortcut, so "Hey Flow" applies.
     pub flow_eligible: bool,
+    /// Optional captured text selection for context awareness / selection-edit.
+    pub captured_selection: Option<String>,
 }
 
 /// Finished text that was never pasted.
@@ -286,6 +288,7 @@ mod tests {
             context: DictationContext {
                 post_process: false,
                 flow_eligible: true,
+                captured_selection: None,
             },
             row,
         }

@@ -1959,6 +1959,82 @@ pub fn change_post_process_min_duration_secs_setting(
 
 #[tauri::command]
 #[specta::specta]
+pub fn change_context_awareness_enabled_setting(
+    app: AppHandle,
+    enabled: bool,
+) -> Result<(), String> {
+    let mut s = settings::get_settings(&app);
+    s.context_awareness_enabled = enabled;
+    settings::write_settings(&app, s);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn change_context_selection_model_setting(
+    app: AppHandle,
+    model: String,
+) -> Result<(), String> {
+    let mut s = settings::get_settings(&app);
+    s.context_selection_model = model;
+    settings::write_settings(&app, s);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_selection_edit_prompt(app: AppHandle) -> Result<String, String> {
+    let s = settings::get_settings(&app);
+    if let Some(p) = s
+        .post_process_prompts
+        .iter()
+        .find(|p| p.id == settings::SELECTION_EDIT_PROMPT_ID)
+    {
+        Ok(p.prompt.clone())
+    } else {
+        Ok(settings::SELECTION_EDIT_PROMPT.to_string())
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn update_selection_edit_prompt(app: AppHandle, prompt: String) -> Result<(), String> {
+    let mut s = settings::get_settings(&app);
+    if let Some(p) = s
+        .post_process_prompts
+        .iter_mut()
+        .find(|p| p.id == settings::SELECTION_EDIT_PROMPT_ID)
+    {
+        p.prompt = prompt;
+    } else {
+        s.post_process_prompts.push(settings::LLMPrompt {
+            id: settings::SELECTION_EDIT_PROMPT_ID.to_string(),
+            name: settings::SELECTION_EDIT_PROMPT_NAME.to_string(),
+            prompt,
+        });
+    }
+    settings::write_settings(&app, s);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn reset_selection_edit_prompt(app: AppHandle) -> Result<String, String> {
+    let mut s = settings::get_settings(&app);
+    let default_prompt = settings::SELECTION_EDIT_PROMPT.to_string();
+    if let Some(p) = s
+        .post_process_prompts
+        .iter_mut()
+        .find(|p| p.id == settings::SELECTION_EDIT_PROMPT_ID)
+    {
+        p.prompt = default_prompt.clone();
+    }
+    settings::write_settings(&app, s);
+    Ok(default_prompt)
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn ping_provider_test(
     app: AppHandle,
     kind: String,

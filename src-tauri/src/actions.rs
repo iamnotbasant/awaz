@@ -2414,6 +2414,15 @@ pub(crate) async fn process_transcription_output(
     transcription: &str,
     post_process: bool,
 ) -> ProcessedTranscription {
+    process_transcription_output_with_selection(app, transcription, post_process, None).await
+}
+
+pub(crate) async fn process_transcription_output_with_selection(
+    app: &AppHandle,
+    transcription: &str,
+    post_process: bool,
+    selection: Option<&str>,
+) -> ProcessedTranscription {
     // A silent recording is a completed no-op. Never start an LLM — or spend its
     // timeout, or a cold engine start — cleaning up a string with no speech in it.
     if crate::audio_toolkit::is_speechless_transcription(transcription) {
@@ -2440,13 +2449,35 @@ pub(crate) async fn process_transcription_output(
         let deadline = TokioInstant::now() + timeout;
         let mut identity: Option<PostProcessIdentity> = None;
 
+        let is_selection_edit = selection.is_some_and(|s| !s.trim().is_empty());
         let outcome = match resolve_post_process_config(&settings) {
-            Ok(config) => {
+            Ok(mut config) => {
+                if is_selection_edit {
+                    let sel_prompt = settings
+                        .post_process_prompts
+                        .iter()
+                        .find(|p| p.id == crate::settings::SELECTION_EDIT_PROMPT_ID)
+                        .map(|p| p.prompt.clone())
+                        .unwrap_or_else(|| crate::settings::SELECTION_EDIT_PROMPT.to_string());
+                    config.prompt = sel_prompt;
+                    config.prompt_id = crate::settings::SELECTION_EDIT_PROMPT_ID.to_string();
+                    if !settings.context_selection_model.trim().is_empty() {
+                        config.model = settings.context_selection_model.clone();
+                    }
+                }
                 identity = Some(PostProcessIdentity::from(&config));
                 let selected_prompt = config.prompt.clone();
+                let input_text = if let Some(sel) = selection.filter(|s| !s.trim().is_empty()) {
+                    format!(
+                        "<selected_text>\n{}\n</selected_text>\n\n<asr_text>\n{}\n</asr_text>",
+                        sel, final_text
+                    )
+                } else {
+                    final_text.clone()
+                };
                 let attempt = tokio::time::timeout_at(
                     deadline,
-                    post_process_transcription(app, &config, &final_text, deadline),
+                    post_process_transcription(app, &config, &input_text, deadline),
                 )
                 .await
                 .unwrap_or(PostProcessAttemptOutcome::TimedOut);
@@ -2807,9 +2838,18 @@ impl ShortcutAction for TranscribeAction {
                                                  // Two different questions. Flow listens only on the dictation shortcut,
                                                  // whatever it does with cleanup; cleanup runs on the cleanup shortcut,
                                                  // and on the dictation shortcut too once it has been moved there.
+        let captured_selection = if get_settings(app).context_awareness_enabled {
+            crate::selection::capture_selection(app)
+                .ok()
+                .flatten()
+                .map(|s| s.text)
+        } else {
+            None
+        };
         let context = DictationContext {
             post_process: cleans_up(self.post_process, &get_settings(app)),
             flow_eligible: !self.post_process,
+            captured_selection,
         };
         show_transcribing_overlay(app, context.post_process);
         let flow_cancel_generation = crate::flow::cancellation_generation();
@@ -2956,6 +2996,7 @@ impl ShortcutAction for TranscribeAction {
             let context = DictationContext {
                 post_process: effective_post_process,
                 flow_eligible: context.flow_eligible,
+                captured_selection: context.captured_selection,
             };
 
             let dictation = Dictation {
@@ -3233,13 +3274,14 @@ async fn deliver_transcription(d: Dictation, transcription: String) {
     if post_process {
         show_processing_overlay(&ah);
     }
+    let selection_text = d.context.captured_selection.as_deref();
     let processed = tokio::select! {
         biased;
         _ = crate::flow::wait_for_generation_cancel(d.flow_cancel_generation) => {
             d.dismiss_transcript(transcription);
             return;
         }
-        result = process_transcription_output(&ah, &transcription, post_process) => result,
+        result = process_transcription_output_with_selection(&ah, &transcription, post_process, selection_text) => result,
     };
 
     // A cleanup that fell back used to be completely silent: the raw transcript
@@ -3637,6 +3679,7 @@ pub fn keep_cancelled_recording(app: &AppHandle, recording: CancelledRecording) 
     let context = DictationContext {
         post_process: cleans_up(cleanup_binding, &get_settings(app)),
         flow_eligible: !cleanup_binding,
+        captured_selection: None,
     };
     let samples = Arc::new(crate::managers::audio::pad_short_recording(
         recording.samples,
