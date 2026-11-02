@@ -15,7 +15,10 @@ import {
   ArrowUpRight,
   Camera,
   Check,
+  ChevronDown,
+  ChevronRight,
   Copy,
+  Download,
   Eye,
   EyeOff,
   FileText,
@@ -24,6 +27,7 @@ import {
   HardDrive,
   MoreHorizontal,
   Pause,
+  Pencil,
   Play,
   RotateCcw,
   Star,
@@ -840,8 +844,15 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
   const [showCopied, setShowCopied] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [showOriginal, setShowOriginal] = useState(false);
+  const [showRawAsr, setShowRawAsr] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [localText, setLocalText] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
   const [audioSrc, setAudioSrc] = useState<string | null>(null);
   const [loadingAudio, setLoadingAudio] = useState(false);
+  const [audioDuration, setAudioDuration] = useState<number | null>(null);
+
+  const hasAudio = Boolean(entry.file_name && entry.file_name.trim().length > 0);
 
   /** Cancelled by the user. The row keeps its audio (and any transcript that
    * was finished) so it can be brought back, but it does not show text the
@@ -867,12 +878,68 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
     !dismissed && (flowEntry || hasDistinctProcessedText) && hasTranscription
       ? entry.transcription_text
       : null;
+  const activeDisplayText = localText ?? finalText;
   const hasCopyableText =
-    !dismissed && (finalText !== null || hasTranscription);
+    !dismissed && (activeDisplayText !== null || hasTranscription);
+
+  useEffect(() => {
+    if (!hasAudio) return;
+    let cancelled = false;
+    const probe = async () => {
+      try {
+        const url = await getAudioUrl(entry.file_name);
+        if (url && !cancelled) {
+          const audio = new Audio();
+          audio.preload = "metadata";
+          audio.onloadedmetadata = () => {
+            if (!cancelled && Number.isFinite(audio.duration) && audio.duration > 0) {
+              setAudioDuration(audio.duration);
+            }
+          };
+          audio.src = url;
+        }
+      } catch {
+        // quiet fallback
+      }
+    };
+    void probe();
+    return () => {
+      cancelled = true;
+    };
+  }, [entry.file_name, getAudioUrl, hasAudio]);
+
+  const displayAudioDuration =
+    audioDuration ??
+    (entry.stt_duration_ms != null ? entry.stt_duration_ms / 1000 : null);
+
+  const isCloud =
+    Boolean(entry.stt_provider) &&
+    entry.stt_provider?.toLowerCase() !== "local";
+  const modeLabel = isCloud ? "Cloud API" : "Local Mode";
+
+  const asrMs = entry.stt_duration_ms;
+  const llmMs = entry.cleanup_duration_ms;
+  const hasTiming = asrMs != null || llmMs != null;
+  const totalSec = hasTiming
+    ? (((asrMs ?? 0) + (llmMs ?? 0)) / 1000).toFixed(1)
+    : null;
+
+  const timingSummary =
+    asrMs != null && llmMs != null
+      ? `Transcribed in ${totalSec}s (ASR ${asrMs}ms + LLM ${llmMs}ms)`
+      : asrMs != null
+        ? `Transcribed in ${totalSec}s (ASR ${asrMs}ms)`
+        : llmMs != null
+          ? `Transcribed in ${totalSec}s (LLM ${llmMs}ms)`
+          : null;
 
   const handleCopyText = () => {
-    if (!hasCopyableText) return;
-    onCopyText();
+    if (!hasCopyableText && !localText) return;
+    if (localText) {
+      void navigator.clipboard.writeText(localText);
+    } else {
+      onCopyText();
+    }
     setShowCopied(true);
     setTimeout(() => setShowCopied(false), 2000);
   };
@@ -887,6 +954,10 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
   };
 
   const handleRetranscribe = async () => {
+    if (!hasAudio) {
+      toast.error("Audio recording is not available");
+      return;
+    }
     try {
       setRetrying(true);
       await retryTranscription(entry.id);
@@ -911,6 +982,10 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
   };
 
   const toggleAudio = async () => {
+    if (!hasAudio) {
+      toast.error("Audio recording is not available");
+      return;
+    }
     if (audioSrc) {
       // Unmounting the player releases a Linux blob URL, so the next play has
       // to fetch a fresh one.
@@ -927,7 +1002,31 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
     }
   };
 
-  const failed = !retrying && !dismissed && finalText === null;
+  const handleDownloadAudio = async () => {
+    if (!hasAudio) {
+      toast.error("Audio recording is not available");
+      return;
+    }
+    try {
+      const url = await getAudioUrl(entry.file_name);
+      if (!url) {
+        toast.error(t("historyPage.audioMissing") || "Audio recording is not available");
+        return;
+      }
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = entry.file_name.endsWith(".wav") ? entry.file_name : `${entry.file_name}.wav`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      toast.success("Audio download started");
+    } catch (error) {
+      console.error("Failed to download audio:", error);
+      toast.error("Failed to download audio");
+    }
+  };
+
+  const failed = !retrying && !dismissed && activeDisplayText === null;
   const copyTitle = t(
     flowEntry && processedText
       ? "settings.history.copyFlowOutput"
@@ -937,6 +1036,16 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
   );
 
   const menuItems: MenuItem[] = [
+    {
+      id: "edit",
+      label: "Edit transcript",
+      icon: Pencil,
+      disabled: retrying || !activeDisplayText,
+      onSelect: () => {
+        setEditText(activeDisplayText ?? "");
+        setIsEditing((v) => !v);
+      },
+    },
     ...(originalText
       ? [
           {
@@ -957,8 +1066,15 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
         ? t("historyPage.hideRecording")
         : t("historyPage.playRecording"),
       icon: audioSrc ? Pause : Play,
-      disabled: loadingAudio || retrying,
+      disabled: !hasAudio || loadingAudio || retrying,
       onSelect: () => void toggleAudio(),
+    },
+    {
+      id: "download",
+      label: "Download audio (WAV)",
+      icon: Download,
+      disabled: !hasAudio || retrying,
+      onSelect: () => void handleDownloadAudio(),
     },
     {
       id: "save",
@@ -975,7 +1091,7 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
         ? t("historyPage.recover")
         : t("settings.history.retranscribe"),
       icon: RotateCcw,
-      disabled: retrying,
+      disabled: !hasAudio || retrying,
       onSelect: () => void (dismissed ? handleRecover() : handleRetranscribe()),
     },
     {
@@ -1006,8 +1122,6 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
       </p>
     );
   } else if (dismissed) {
-    // Said plainly and in the same quiet grey as a failed row: a dismissal is
-    // the user's own choice, not an error to flag.
     body = (
       <p className="text-sm leading-relaxed text-muted">
         {t("historyPage.dismissed")}{" "}
@@ -1021,10 +1135,44 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
         </button>
       </p>
     );
-  } else if (finalText !== null) {
+  } else if (isEditing) {
+    body = (
+      <div className="my-2 space-y-2">
+        <textarea
+          value={editText}
+          onChange={(e) => setEditText(e.target.value)}
+          className="w-full rounded-lg border border-hairline bg-surface p-2.5 text-sm text-ink focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+          rows={3}
+          autoFocus
+        />
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            onClick={() => {
+              setLocalText(editText);
+              setIsEditing(false);
+              toast.success("Transcript updated");
+            }}
+          >
+            Save
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setEditText(activeDisplayText ?? "");
+              setIsEditing(false);
+            }}
+          >
+            Cancel
+          </Button>
+        </div>
+      </div>
+    );
+  } else if (activeDisplayText !== null) {
     body = (
       <p className="max-w-[75ch] cursor-text select-text whitespace-pre-wrap break-words text-[0.9375rem] leading-relaxed text-ink">
-        {finalText}
+        {activeDisplayText}
       </p>
     );
   } else if (flowEntry && hasTranscription) {
@@ -1082,6 +1230,65 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
                 <Copy width={14} height={14} />
               )}
             </IconButton>
+            <IconButton
+              onClick={onToggleSaved}
+              disabled={retrying}
+              title={entry.saved ? t("settings.history.unsave") : t("settings.history.save")}
+              tone={entry.saved ? "text-amber-500 hover:text-amber-600" : undefined}
+            >
+              <Star width={14} height={14} fill={entry.saved ? "currentColor" : "none"} />
+            </IconButton>
+            <IconButton
+              onClick={() => {
+                setEditText(activeDisplayText ?? "");
+                setIsEditing((v) => !v);
+              }}
+              disabled={retrying || !activeDisplayText}
+              title="Edit transcript"
+            >
+              <Pencil width={14} height={14} />
+            </IconButton>
+            <IconButton
+              onClick={() => void toggleAudio()}
+              disabled={loadingAudio || retrying || !hasAudio}
+              title={
+                !hasAudio
+                  ? "Audio not available"
+                  : audioSrc
+                    ? t("historyPage.hideRecording")
+                    : t("historyPage.playRecording")
+              }
+            >
+              {audioSrc ? <Pause width={14} height={14} /> : <Play width={14} height={14} />}
+            </IconButton>
+            <IconButton
+              onClick={() => void handleDownloadAudio()}
+              disabled={retrying || !hasAudio}
+              title={!hasAudio ? "Audio not available" : "Download recording WAV"}
+            >
+              <Download width={14} height={14} />
+            </IconButton>
+            <IconButton
+              onClick={() => void (dismissed ? handleRecover() : handleRetranscribe())}
+              disabled={retrying || !hasAudio}
+              title={
+                !hasAudio
+                  ? "Audio not available"
+                  : dismissed
+                    ? t("historyPage.recover")
+                    : t("settings.history.retranscribe")
+              }
+            >
+              <RotateCcw width={14} height={14} />
+            </IconButton>
+            <IconButton
+              onClick={() => void handleDeleteEntry()}
+              disabled={retrying}
+              title={t("settings.history.delete")}
+              tone="text-muted hover:text-red-500"
+            >
+              <Trash2 width={14} height={14} />
+            </IconButton>
             <MenuButton
               items={menuItems}
               width={220}
@@ -1105,6 +1312,76 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
     >
       {body}
 
+      {/* Collapsible Raw ASR block */}
+      {entry.transcription_text && (
+        <div className="mt-2 text-xs">
+          <button
+            type="button"
+            onClick={() => setShowRawAsr((v) => !v)}
+            className="inline-flex items-center gap-1.5 font-medium text-muted hover:text-ink transition-colors"
+            aria-expanded={showRawAsr}
+            data-testid="raw-asr-toggle"
+          >
+            {showRawAsr ? (
+              <ChevronDown width={13} height={13} className="shrink-0" />
+            ) : (
+              <ChevronRight width={13} height={13} className="shrink-0" />
+            )}
+            <span className="font-semibold text-ink/80">Raw ASR:</span>
+            {!showRawAsr && (
+              <span className="max-w-[40ch] truncate text-muted-soft">
+                {entry.transcription_text}
+              </span>
+            )}
+          </button>
+          {showRawAsr && (
+            <div
+              data-testid="raw-asr-content"
+              className="mt-1.5 max-w-[75ch] rounded-lg border border-hairline bg-surface/50 p-2.5 font-sans text-xs text-muted leading-relaxed select-text whitespace-pre-wrap break-words"
+            >
+              {entry.transcription_text}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Metadata Chips */}
+      <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[11px]">
+        <span className="inline-flex items-center rounded-md border border-hairline bg-surface/80 px-2 py-0.5 font-medium text-muted">
+          {modeLabel}
+        </span>
+        <span className="inline-flex items-center gap-1 rounded-md border border-hairline bg-surface/80 px-2 py-0.5 text-muted-soft">
+          <span className="font-medium text-muted">ASR:</span>
+          <span>{entry.stt_provider || "Local"}</span>
+          {entry.stt_model && <span className="text-muted">({entry.stt_model})</span>}
+        </span>
+        {(entry.cleanup_provider || entry.cleanup_status || entry.post_process_requested) && (
+          <span
+            className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 ${
+              entry.cleanup_status === "applied" || !entry.cleanup_status
+                ? "border-hairline bg-surface/80 text-muted-soft"
+                : "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+            }`}
+          >
+            <span className="font-medium text-muted">AI:</span>
+            <span>{entry.cleanup_provider || "Local"}</span>
+            {entry.cleanup_model && <span className="opacity-80">({entry.cleanup_model})</span>}
+          </span>
+        )}
+        {displayAudioDuration != null && (
+          <span className="inline-flex items-center rounded-md border border-hairline bg-surface/80 px-2 py-0.5 text-muted-soft">
+            <span>Audio {displayAudioDuration.toFixed(1)}s</span>
+          </span>
+        )}
+      </div>
+
+      {/* Timing summary */}
+      {timingSummary && (
+        <div className="mt-1 text-[11px] text-muted-soft tabular-nums" data-testid="timing-summary">
+          {timingSummary}
+        </div>
+      )}
+
       {/* eslint-disable i18next/no-literal-string */}
       {entry.cleanup_error && (
         <div className="mt-2 flex items-center gap-1.5 rounded border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-600 dark:text-amber-400">
@@ -1115,90 +1392,7 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
           </span>
         </div>
       )}
-
-      {(entry.stt_provider ||
-        entry.cleanup_provider ||
-        entry.stt_duration_ms != null ||
-        entry.cleanup_duration_ms != null) && (
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
-          {entry.stt_provider && (
-            <span className="inline-flex items-center gap-1 rounded border border-hairline bg-surface px-1.5 py-0.5 text-muted-soft">
-              <span className="font-medium text-muted">ASR:</span>
-              <span>{entry.stt_provider}</span>
-              {entry.stt_model && (
-                <span className="text-muted">({entry.stt_model})</span>
-              )}
-              {entry.stt_duration_ms != null && (
-                <span className="text-muted">
-                  · {(entry.stt_duration_ms / 1000).toFixed(1)}s
-                </span>
-              )}
-            </span>
-          )}
-          {(entry.cleanup_provider || entry.cleanup_status) && (
-            <span
-              className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 ${
-                entry.cleanup_status === "applied"
-                  ? "border-hairline bg-surface text-muted-soft"
-                  : "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
-              }`}
-            >
-              <span className="font-medium">AI:</span>
-              {entry.cleanup_provider && <span>{entry.cleanup_provider}</span>}
-              {entry.cleanup_model && (
-                <span className="opacity-80">({entry.cleanup_model})</span>
-              )}
-              {entry.cleanup_duration_ms != null && (
-                <span className="opacity-80">
-                  · {(entry.cleanup_duration_ms / 1000).toFixed(1)}s
-                </span>
-              )}
-              {entry.cleanup_status && entry.cleanup_status !== "applied" && (
-                <span className="font-semibold uppercase text-[10px]">
-                  ({entry.cleanup_status})
-                </span>
-              )}
-            </span>
-          )}
-        </div>
-      )}
       {/* eslint-enable i18next/no-literal-string */}
-
-      {originalText && (
-        <button
-          type="button"
-          onClick={() => setShowOriginal((v) => !v)}
-          className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-muted hover:text-ink transition-colors"
-        >
-          {showOriginal ? (
-            <EyeOff width={12} height={12} />
-          ) : (
-            <Eye width={12} height={12} />
-          )}
-          <span>
-            {showOriginal
-              ? t("historyPage.hideOriginal")
-              : flowEntry
-                ? t("historyPage.showSaid")
-                : t("historyPage.showOriginal")}
-          </span>
-        </button>
-      )}
-
-      {showOriginal && originalText && (
-        <div className="mt-2.5 max-w-[75ch] rounded-lg border border-hairline bg-canvas px-3 py-2.5">
-          <p className="mb-1 text-xs font-medium text-muted">
-            {t(
-              flowEntry
-                ? "settings.history.flowTranscriptLabel"
-                : "settings.history.originalTranscriptionLabel",
-            )}
-          </p>
-          <p className="select-text whitespace-pre-wrap break-words text-[0.8125rem] leading-relaxed text-body">
-            {originalText}
-          </p>
-        </div>
-      )}
 
       {audioSrc && (
         <AudioPlayer src={audioSrc} autoPlay className="mt-2.5 w-full" />
