@@ -200,8 +200,7 @@ const settingUpdaters: {
     commands.changeAssistantOverlayStyleSetting(value as string),
   overlay_waveform_theme: (value) =>
     commands.changeOverlayWaveformThemeSetting(value as string),
-  overlay_width: (value) =>
-    commands.changeOverlayWidthSetting(value as string),
+  overlay_width: (value) => commands.changeOverlayWidthSetting(value as string),
   overlay_show_duration: (value) =>
     commands.changeOverlayShowDurationSetting(value as boolean),
   overlay_streaming_display: (value) =>

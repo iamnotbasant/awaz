@@ -852,7 +852,9 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
   const [loadingAudio, setLoadingAudio] = useState(false);
   const [audioDuration, setAudioDuration] = useState<number | null>(null);
 
-  const hasAudio = Boolean(entry.file_name && entry.file_name.trim().length > 0);
+  const hasAudio = Boolean(
+    entry.file_name && entry.file_name.trim().length > 0,
+  );
 
   /** Cancelled by the user. The row keeps its audio (and any transcript that
    * was finished) so it can be brought back, but it does not show text the
@@ -892,7 +894,11 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
           const audio = new Audio();
           audio.preload = "metadata";
           audio.onloadedmetadata = () => {
-            if (!cancelled && Number.isFinite(audio.duration) && audio.duration > 0) {
+            if (
+              !cancelled &&
+              Number.isFinite(audio.duration) &&
+              audio.duration > 0
+            ) {
               setAudioDuration(audio.duration);
             }
           };
@@ -1010,12 +1016,16 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
     try {
       const url = await getAudioUrl(entry.file_name);
       if (!url) {
-        toast.error(t("historyPage.audioMissing") || "Audio recording is not available");
+        toast.error(
+          t("historyPage.audioMissing") || "Audio recording is not available",
+        );
         return;
       }
       const a = document.createElement("a");
       a.href = url;
-      a.download = entry.file_name.endsWith(".wav") ? entry.file_name : `${entry.file_name}.wav`;
+      a.download = entry.file_name.endsWith(".wav")
+        ? entry.file_name
+        : `${entry.file_name}.wav`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -1146,6 +1156,7 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
           autoFocus
         />
         <div className="flex items-center gap-2">
+          {/* eslint-disable i18next/no-literal-string */}
           <Button
             size="sm"
             onClick={() => {
@@ -1166,6 +1177,7 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
           >
             Cancel
           </Button>
+          {/* eslint-enable i18next/no-literal-string */}
         </div>
       </div>
     );
@@ -1233,10 +1245,20 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
             <IconButton
               onClick={onToggleSaved}
               disabled={retrying}
-              title={entry.saved ? t("settings.history.unsave") : t("settings.history.save")}
-              tone={entry.saved ? "text-amber-500 hover:text-amber-600" : undefined}
+              title={
+                entry.saved
+                  ? t("settings.history.unsave")
+                  : t("settings.history.save")
+              }
+              tone={
+                entry.saved ? "text-amber-500 hover:text-amber-600" : undefined
+              }
             >
-              <Star width={14} height={14} fill={entry.saved ? "currentColor" : "none"} />
+              <Star
+                width={14}
+                height={14}
+                fill={entry.saved ? "currentColor" : "none"}
+              />
             </IconButton>
             <IconButton
               onClick={() => {
@@ -1259,17 +1281,25 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
                     : t("historyPage.playRecording")
               }
             >
-              {audioSrc ? <Pause width={14} height={14} /> : <Play width={14} height={14} />}
+              {audioSrc ? (
+                <Pause width={14} height={14} />
+              ) : (
+                <Play width={14} height={14} />
+              )}
             </IconButton>
             <IconButton
               onClick={() => void handleDownloadAudio()}
               disabled={retrying || !hasAudio}
-              title={!hasAudio ? "Audio not available" : "Download recording WAV"}
+              title={
+                !hasAudio ? "Audio not available" : "Download recording WAV"
+              }
             >
               <Download width={14} height={14} />
             </IconButton>
             <IconButton
-              onClick={() => void (dismissed ? handleRecover() : handleRetranscribe())}
+              onClick={() =>
+                void (dismissed ? handleRecover() : handleRetranscribe())
+              }
               disabled={retrying || !hasAudio}
               title={
                 !hasAudio
@@ -1313,6 +1343,7 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
       {body}
 
       {/* Collapsible Raw ASR block */}
+      {/* eslint-disable i18next/no-literal-string */}
       {entry.transcription_text && (
         <div className="mt-2 text-xs">
           <button
@@ -1353,9 +1384,13 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
         <span className="inline-flex items-center gap-1 rounded-md border border-hairline bg-surface/80 px-2 py-0.5 text-muted-soft">
           <span className="font-medium text-muted">ASR:</span>
           <span>{entry.stt_provider || "Local"}</span>
-          {entry.stt_model && <span className="text-muted">({entry.stt_model})</span>}
+          {entry.stt_model && (
+            <span className="text-muted">({entry.stt_model})</span>
+          )}
         </span>
-        {(entry.cleanup_provider || entry.cleanup_status || entry.post_process_requested) && (
+        {(entry.cleanup_provider ||
+          entry.cleanup_status ||
+          entry.post_process_requested) && (
           <span
             className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 ${
               entry.cleanup_status === "applied" || !entry.cleanup_status
@@ -1365,7 +1400,9 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
           >
             <span className="font-medium text-muted">AI:</span>
             <span>{entry.cleanup_provider || "Local"}</span>
-            {entry.cleanup_model && <span className="opacity-80">({entry.cleanup_model})</span>}
+            {entry.cleanup_model && (
+              <span className="opacity-80">({entry.cleanup_model})</span>
+            )}
           </span>
         )}
         {displayAudioDuration != null && (
@@ -1374,10 +1411,14 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
           </span>
         )}
       </div>
+      {/* eslint-enable i18next/no-literal-string */}
 
       {/* Timing summary */}
       {timingSummary && (
-        <div className="mt-1 text-[11px] text-muted-soft tabular-nums" data-testid="timing-summary">
+        <div
+          className="mt-1 text-[11px] text-muted-soft tabular-nums"
+          data-testid="timing-summary"
+        >
           {timingSummary}
         </div>
       )}

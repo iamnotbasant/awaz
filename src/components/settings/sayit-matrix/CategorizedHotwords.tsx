@@ -182,9 +182,7 @@ export const CategorizedHotwords: React.FC = () => {
       <div className="pt-3 border-t border-hairline">
         <ToggleSwitch
           checked={sendHotwordsToAi}
-          onChange={(val) =>
-            void updateSetting("send_hotwords_to_prompt", val)
-          }
+          onChange={(val) => void updateSetting("send_hotwords_to_prompt", val)}
           isUpdating={isUpdating("send_hotwords_to_prompt")}
           label={t("settings.hotwords.sendToAiPrompt", {
             defaultValue: "Send hotwords to the AI prompt",

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { BUILTIN_PRESET_METADATA, type PresetDefinition } from "./PromptPresetManager";
+import {
+  BUILTIN_PRESET_METADATA,
+  type PresetDefinition,
+} from "./PromptPresetManager";
 
 describe("P4: Presets UI Parity & Management", () => {
   it("contains all 5 built-in presets: Intent, Faithful, Chinese to English, Conversational, and Hinglish Roman", () => {
@@ -16,7 +19,9 @@ describe("P4: Presets UI Parity & Management", () => {
     for (const preset of BUILTIN_PRESET_METADATA) {
       expect(preset.builtin).toBe(true);
     }
-    const hinglish = BUILTIN_PRESET_METADATA.find((p) => p.id === "hinglish_roman");
+    const hinglish = BUILTIN_PRESET_METADATA.find(
+      (p) => p.id === "hinglish_roman",
+    );
     expect(hinglish).toBeDefined();
     expect(hinglish?.isDefault).toBe(true);
 
@@ -43,7 +48,9 @@ describe("P4: Presets UI Parity & Management", () => {
     expect(casual.nameEn).toBe("Conversational cleanup");
     expect(casual.nameZh).toBe("口语化整理");
 
-    const hinglish = BUILTIN_PRESET_METADATA.find((p) => p.id === "hinglish_roman")!;
+    const hinglish = BUILTIN_PRESET_METADATA.find(
+      (p) => p.id === "hinglish_roman",
+    )!;
     expect(hinglish.nameEn).toBe("Hinglish Roman");
     expect(hinglish.nameZh).toBe("印英语音转罗马字");
   });
@@ -69,8 +76,16 @@ describe("P4: Presets UI Parity & Management", () => {
     const allPrompts = [
       { id: "hinglish_roman", name: "Hinglish Roman", prompt: "..." },
       { id: "intent", name: "Intent cleanup", prompt: "..." },
-      { id: "custom_meeting", name: "Executive Meeting", prompt: "Summarize into bullet points." },
-      { id: "custom_code", name: "Code Review", prompt: "Format as git diff feedback." },
+      {
+        id: "custom_meeting",
+        name: "Executive Meeting",
+        prompt: "Summarize into bullet points.",
+      },
+      {
+        id: "custom_code",
+        name: "Code Review",
+        prompt: "Format as git diff feedback.",
+      },
     ];
 
     const customPrompts = allPrompts.filter((p) => !builtinIds.has(p.id));

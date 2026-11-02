@@ -130,6 +130,7 @@ export const SkipCleanupDurationRow: React.FC = () => {
             }}
             className="h-8 w-16 rounded-lg border border-hairline bg-surface-muted px-2 text-right text-xs font-mono text-ink focus:border-accent focus:outline-none"
           />
+          {/* eslint-disable-next-line i18next/no-literal-string */}
           <span className="text-xs text-muted">sec</span>
         </div>
       </div>

@@ -181,7 +181,10 @@ export const OverlayPreview: React.FC<{
 
       {/* SayIt Pure-Black Overlay Capsule */}
       <div className="flex items-center rounded-full border border-zinc-700 bg-black px-4 py-2 shadow-[0_6px_16px_rgba(0,0,0,0.6)]">
-        <div className="flex items-center gap-[2.5px]" style={{ height: "20px" }}>
+        <div
+          className="flex items-center gap-[2.5px]"
+          style={{ height: "20px" }}
+        >
           {Array.from({ length: barCount }, (_, index) => {
             const color = getBarColor(index, barCount, theme);
             return (
@@ -237,7 +240,8 @@ export const OverlayStyle: React.FC<{
       ? Boolean(getSetting("overlay_streaming_display" as any))
       : true;
 
-  const widthPreset = OVERLAY_WIDTH_PRESETS[currentWidth] || OVERLAY_WIDTH_PRESETS.medium;
+  const widthPreset =
+    OVERLAY_WIDTH_PRESETS[currentWidth] || OVERLAY_WIDTH_PRESETS.medium;
 
   return (
     <div className="space-y-4 rounded-2xl border border-hairline bg-surface p-5 elev-card">
@@ -323,7 +327,10 @@ export const OverlayStyle: React.FC<{
             { value: "short", label: "Short" },
           ]}
           onChange={(val) =>
-            void updateSetting("overlay_width" as any, val as OverlayWidthPreset)
+            void updateSetting(
+              "overlay_width" as any,
+              val as OverlayWidthPreset,
+            )
           }
           disabled={isUpdating("overlay_width" as any)}
           size="sm"

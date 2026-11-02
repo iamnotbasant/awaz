@@ -104,7 +104,9 @@ describe("P5: Per-App Rules & Process Matching", () => {
 
     const match2 = matchAppRule(rules, "olk.exe");
     expect(match2?.id).toBe("outlook");
-    expect(match2?.promptAppend).toContain("Adapted for professional email drafting");
+    expect(match2?.promptAppend).toContain(
+      "Adapted for professional email drafting",
+    );
   });
 
   it("matches Kiro rule when enabled with faithful preset and dev prompt append", () => {

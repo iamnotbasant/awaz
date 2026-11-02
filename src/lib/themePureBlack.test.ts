@@ -55,7 +55,9 @@ describe("P8: Pure-black Theme", () => {
       "../assistant/AssistantPanel.css",
     );
     const assistantCss = fs.readFileSync(assistantCssPath, "utf-8");
-    expect(assistantCss).toContain("--as-surface: rgba(0, 0, 0, var(--as-alpha, 1));");
+    expect(assistantCss).toContain(
+      "--as-surface: rgba(0, 0, 0, var(--as-alpha, 1));",
+    );
     expect(assistantCss).toContain("--as-ink: #ffffff;");
   });
 });

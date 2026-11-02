@@ -60,7 +60,9 @@ describe("History Parity (P7)", () => {
   it("preserves cleaned Roman text on top and raw ASR as distinct source", () => {
     expect(sampleEntry.post_processed_text).toBe("Namaste aap kaise hain");
     expect(sampleEntry.transcription_text).toBe("नमस्ते आप कैसे हैं");
-    expect(sampleEntry.post_processed_text).not.toBe(sampleEntry.transcription_text);
+    expect(sampleEntry.post_processed_text).not.toBe(
+      sampleEntry.transcription_text,
+    );
   });
 
   it("enforces D9 disabled actions when audio file is missing", () => {
@@ -70,7 +72,8 @@ describe("History Parity (P7)", () => {
     };
 
     const hasAudio = Boolean(
-      entryWithoutAudio.file_name && entryWithoutAudio.file_name.trim().length > 0,
+      entryWithoutAudio.file_name &&
+        entryWithoutAudio.file_name.trim().length > 0,
     );
     expect(hasAudio).toBe(false);
 

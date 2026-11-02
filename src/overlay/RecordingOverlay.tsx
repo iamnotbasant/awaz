@@ -640,10 +640,13 @@ const RecordingOverlay: React.FC = () => {
         if (visible && !finished) queueText(payload);
       }).then(register),
       listen<any>("settings-changed", ({ payload }) => {
-        if (payload?.overlay_waveform_theme) setOverlayTheme(payload.overlay_waveform_theme);
+        if (payload?.overlay_waveform_theme)
+          setOverlayTheme(payload.overlay_waveform_theme);
         if (payload?.overlay_width) setOverlayWidth(payload.overlay_width);
-        if (payload?.overlay_show_duration !== undefined) setShowDuration(Boolean(payload.overlay_show_duration));
-        if (payload?.overlay_streaming_display !== undefined) setStreamingDisplay(Boolean(payload.overlay_streaming_display));
+        if (payload?.overlay_show_duration !== undefined)
+          setShowDuration(Boolean(payload.overlay_show_duration));
+        if (payload?.overlay_streaming_display !== undefined)
+          setStreamingDisplay(Boolean(payload.overlay_streaming_display));
       }).then(register),
     ]).catch((error) => console.error("Overlay listeners failed:", error));
 
@@ -1103,6 +1106,7 @@ const RecordingOverlay: React.FC = () => {
                       ? 12
                       : 18,
               })}
+              {/* eslint-disable i18next/no-literal-string */}
               {showDuration && isRecording && (
                 <span
                   className="overlay-timer"
@@ -1124,6 +1128,7 @@ const RecordingOverlay: React.FC = () => {
                   {elapsedSeconds.toFixed(1)}s
                 </span>
               )}
+              {/* eslint-enable i18next/no-literal-string */}
             </div>
           )}
         </div>

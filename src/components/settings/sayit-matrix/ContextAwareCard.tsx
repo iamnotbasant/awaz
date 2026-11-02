@@ -129,7 +129,9 @@ export const ContextAwareCard: React.FC = () => {
         </div>
         <Switch
           checked={enabled}
-          onChange={(val) => void updateSetting("context_awareness_enabled", val)}
+          onChange={(val) =>
+            void updateSetting("context_awareness_enabled", val)
+          }
           disabled={isUpdating("context_awareness_enabled")}
           label={t("settings.contextAware.toggle", {
             defaultValue: "Context awareness",
@@ -156,7 +158,9 @@ export const ContextAwareCard: React.FC = () => {
             <Dropdown
               options={modelOptions}
               selectedValue={currentModel}
-              onSelect={(val) => void updateSetting("context_selection_model", val)}
+              onSelect={(val) =>
+                void updateSetting("context_selection_model", val)
+              }
             />
           </div>
         </div>

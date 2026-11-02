@@ -142,7 +142,11 @@ export const PromptPresetManager: React.FC = () => {
     setIsDialogOpen(true);
   };
 
-  const openEditPresetDialog = (id: string, name: string, promptText: string) => {
+  const openEditPresetDialog = (
+    id: string,
+    name: string,
+    promptText: string,
+  ) => {
     setEditingPresetId(id);
     setPresetDraftName(name);
     setPresetDraftPrompt(promptText);
@@ -243,7 +247,9 @@ export const PromptPresetManager: React.FC = () => {
       if (res.status === "ok") {
         await loadRules();
         toast.success(
-          !currentEnabled ? "Application rule enabled" : "Application rule disabled",
+          !currentEnabled
+            ? "Application rule enabled"
+            : "Application rule disabled",
         );
       }
     } catch (err) {
@@ -302,7 +308,12 @@ export const PromptPresetManager: React.FC = () => {
   const customPrompts = prompts.filter((p) => !BUILTIN_IDS.has(p.id));
 
   const templateOptions = [
-    { value: "", label: t("settings.presets.scratch", { defaultValue: "Start from scratch" }) },
+    {
+      value: "",
+      label: t("settings.presets.scratch", {
+        defaultValue: "Start from scratch",
+      }),
+    },
     ...prompts.map((p) => ({ value: p.id, label: p.name })),
   ];
 
@@ -358,8 +369,10 @@ export const PromptPresetManager: React.FC = () => {
           {/* 1. Built-in presets */}
           {BUILTIN_PRESET_METADATA.map((meta) => {
             const isSelected = selectedPromptId === meta.id;
-            const displayName = tabLanguage === "zh" ? meta.nameZh : meta.nameEn;
-            const displayDesc = tabLanguage === "zh" ? meta.descZh : meta.descEn;
+            const displayName =
+              tabLanguage === "zh" ? meta.nameZh : meta.nameEn;
+            const displayDesc =
+              tabLanguage === "zh" ? meta.descZh : meta.descEn;
 
             return (
               <button
@@ -377,11 +390,17 @@ export const PromptPresetManager: React.FC = () => {
                     <span className="font-medium text-sm text-ink">
                       {displayName}
                     </span>
-                    <Badge variant="secondary" className="text-[10px] py-0 px-1.5">
+                    <Badge
+                      variant="secondary"
+                      className="text-[10px] py-0 px-1.5"
+                    >
                       Built in
                     </Badge>
                     {meta.isDefault && (
-                      <Badge variant="active" className="text-[10px] py-0 px-1.5">
+                      <Badge
+                        variant="active"
+                        className="text-[10px] py-0 px-1.5"
+                      >
                         Default
                       </Badge>
                     )}
@@ -417,7 +436,10 @@ export const PromptPresetManager: React.FC = () => {
                     <span className="font-medium text-sm text-ink truncate">
                       {custom.name}
                     </span>
-                    <Badge variant="outline" className="text-[10px] py-0 px-1.5">
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] py-0 px-1.5"
+                    >
                       Custom
                     </Badge>
                   </div>
@@ -433,7 +455,11 @@ export const PromptPresetManager: React.FC = () => {
                     className="h-6 w-6 p-0 text-muted hover:text-ink"
                     onClick={(e) => {
                       e.stopPropagation();
-                      openEditPresetDialog(custom.id, custom.name, custom.prompt);
+                      openEditPresetDialog(
+                        custom.id,
+                        custom.name,
+                        custom.prompt,
+                      );
                     }}
                   >
                     <Pencil className="h-3 w-3" />
@@ -468,7 +494,9 @@ export const PromptPresetManager: React.FC = () => {
         title={
           editingPresetId
             ? t("settings.presets.editTitle", { defaultValue: "Edit Preset" })
-            : t("settings.presets.createTitle", { defaultValue: "New Cleanup Preset" })
+            : t("settings.presets.createTitle", {
+                defaultValue: "New Cleanup Preset",
+              })
         }
         description={t("settings.presets.dialogDesc", {
           defaultValue:
@@ -478,7 +506,9 @@ export const PromptPresetManager: React.FC = () => {
         <div className="space-y-4 pt-2">
           <div>
             <label className="mb-1 block text-xs font-medium text-ink">
-              {t("settings.presets.presetName", { defaultValue: "Preset Name" })}
+              {t("settings.presets.presetName", {
+                defaultValue: "Preset Name",
+              })}
             </label>
             <Input
               value={presetDraftName}
@@ -536,7 +566,9 @@ export const PromptPresetManager: React.FC = () => {
             >
               {editingPresetId
                 ? t("common.save", { defaultValue: "Save" })
-                : t("settings.presets.create", { defaultValue: "Create Preset" })}
+                : t("settings.presets.create", {
+                    defaultValue: "Create Preset",
+                  })}
             </Button>
           </div>
         </div>
@@ -638,7 +670,9 @@ export const PromptPresetManager: React.FC = () => {
                       )}
                       <Switch
                         checked={rule.enabled}
-                        onChange={() => void handleToggleRule(rule.id, rule.enabled)}
+                        onChange={() =>
+                          void handleToggleRule(rule.id, rule.enabled)
+                        }
                         label={`Toggle rule ${rule.name}`}
                       />
                     </div>
@@ -662,8 +696,12 @@ export const PromptPresetManager: React.FC = () => {
         onClose={() => setIsRuleDialogOpen(false)}
         title={
           editingRuleId
-            ? t("settings.presets.editRuleTitle", { defaultValue: "Edit Application Rule" })
-            : t("settings.presets.createRuleTitle", { defaultValue: "New Application Rule" })
+            ? t("settings.presets.editRuleTitle", {
+                defaultValue: "Edit Application Rule",
+              })
+            : t("settings.presets.createRuleTitle", {
+                defaultValue: "New Application Rule",
+              })
         }
         description={t("settings.presets.ruleDialogDesc", {
           defaultValue:
