@@ -130,6 +130,89 @@ pub fn should_skip_cleanup_for_duration(min_duration_secs: u32, audio_duration_s
     min_duration_secs > 0 && audio_duration_secs < (min_duration_secs as f64)
 }
 
+static MOCKED_ACTIVE_PROCESS: std::sync::RwLock<Option<String>> = std::sync::RwLock::new(None);
+
+pub fn set_mock_active_process(name: Option<String>) {
+    if let Ok(mut lock) = MOCKED_ACTIVE_PROCESS.write() {
+        *lock = name;
+    }
+}
+
+pub fn get_mock_active_process() -> Option<String> {
+    if let Ok(lock) = MOCKED_ACTIVE_PROCESS.read() {
+        lock.clone()
+    } else {
+        None
+    }
+}
+
+#[cfg(target_os = "windows")]
+pub fn get_active_process_name() -> Option<String> {
+    use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        if hwnd.is_invalid() {
+            return None;
+        }
+        let mut pid = 0u32;
+        GetWindowThreadProcessId(hwnd, Some(&mut pid));
+        if pid == 0 {
+            return None;
+        }
+        use windows::core::PWSTR;
+        use windows::Win32::Foundation::CloseHandle;
+        use windows::Win32::System::Threading::{
+            OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
+            PROCESS_QUERY_LIMITED_INFORMATION,
+        };
+
+        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
+        let mut buffer = [0u16; 260];
+        let mut length = buffer.len() as u32;
+        let queried = QueryFullProcessImageNameW(
+            handle,
+            PROCESS_NAME_WIN32,
+            PWSTR(buffer.as_mut_ptr()),
+            &mut length,
+        );
+        let _ = CloseHandle(handle);
+        queried.ok()?;
+
+        let path = String::from_utf16_lossy(&buffer[..length as usize]);
+        std::path::Path::new(&path)
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned().to_lowercase())
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn get_active_process_name() -> Option<String> {
+    None
+}
+
+pub fn resolve_active_process_name() -> Option<String> {
+    if let Some(mocked) = get_mock_active_process() {
+        return Some(mocked.to_lowercase());
+    }
+    get_active_process_name()
+}
+
+pub fn match_app_rule<'a>(
+    rules: &'a [crate::settings::AppPromptRule],
+    process_name: &str,
+) -> Option<&'a crate::settings::AppPromptRule> {
+    let proc_lower = process_name.trim().to_lowercase();
+    rules.iter().find(|rule| {
+        rule.enabled
+            && rule.process_names.iter().any(|pattern| {
+                let p = pattern.trim().to_lowercase();
+                proc_lower == p
+                    || proc_lower.ends_with(&format!("/{}", p))
+                    || proc_lower.ends_with(&format!("\\{}", p))
+            })
+    })
+}
+
 /// Return the UI to rest: overlay down, tray idle.
 ///
 /// Every exit from the post-recording pipeline has to end here. The paths that
@@ -2496,6 +2579,18 @@ pub(crate) async fn process_transcription_output_with_selection(
                     config.prompt_id = crate::settings::SELECTION_EDIT_PROMPT_ID.to_string();
                     if !settings.context_selection_model.trim().is_empty() {
                         config.model = settings.context_selection_model.clone();
+                    }
+                } else if let Some(active_proc) = resolve_active_process_name() {
+                    if let Some(rule) = match_app_rule(&settings.app_rules, &active_proc) {
+                        log::info!("Matched per-app rule '{}' for process '{}'", rule.name, active_proc);
+                        if let Some(preset) = settings.post_process_prompts.iter().find(|p| p.id == rule.preset_id) {
+                            config.prompt = preset.prompt.clone();
+                            config.prompt_id = rule.preset_id.clone();
+                        }
+                        if !rule.prompt_append.trim().is_empty() {
+                            config.prompt.push_str("\n\n---\nAPP-SPECIFIC INSTRUCTIONS:\n");
+                            config.prompt.push_str(&rule.prompt_append);
+                        }
                     }
                 }
                 identity = Some(PostProcessIdentity::from(&config));
@@ -5482,6 +5577,55 @@ Try plugging it into a coding agent or productivity app listed on https://openro
         assert!(layer.contains("- PostgreSQL"));
         assert!(layer.contains("- Tauri"));
         assert!(layer.contains("- Zustand"));
+    }
+
+    #[test]
+    fn test_p5_app_rule_matching_and_override() {
+        let mut rules = crate::settings::default_app_rules();
+
+        // 1. Built-in rules Teams, Outlook, Kiro exist and are OFF by default
+        assert_eq!(rules.len(), 3);
+        assert_eq!(rules[0].id, "teams");
+        assert_eq!(rules[1].id, "outlook");
+        assert_eq!(rules[2].id, "kiro");
+        assert!(!rules[0].enabled);
+        assert!(!rules[1].enabled);
+        assert!(!rules[2].enabled);
+
+        // Disabled rules never match
+        assert!(match_app_rule(&rules, "teams.exe").is_none());
+        assert!(match_app_rule(&rules, "ms-teams.exe").is_none());
+        assert!(match_app_rule(&rules, "outlook.exe").is_none());
+        assert!(match_app_rule(&rules, "kiro.exe").is_none());
+
+        // 2. Enable Teams rule and test matching
+        rules[0].enabled = true;
+        let matched = match_app_rule(&rules, "teams.exe").expect("Should match teams.exe");
+        assert_eq!(matched.id, "teams");
+        assert_eq!(matched.preset_id, "intent");
+
+        let matched_caps = match_app_rule(&rules, "TEAMS.EXE").expect("Should match case-insensitively");
+        assert_eq!(matched_caps.id, "teams");
+
+        let matched_alt = match_app_rule(&rules, "C:\\Users\\User\\AppData\\Local\\Microsoft\\Teams\\ms-teams.exe")
+            .expect("Should match full path");
+        assert_eq!(matched_alt.id, "teams");
+
+        // 3. Enable Kiro rule and test matching
+        rules[2].enabled = true;
+        let matched_kiro = match_app_rule(&rules, "kiro.exe").expect("Should match kiro.exe");
+        assert_eq!(matched_kiro.id, "kiro");
+        assert_eq!(matched_kiro.preset_id, "faithful");
+        assert!(matched_kiro.prompt_append.contains("Optimized for developer tools"));
+
+        // 4. Test mocking active process
+        set_mock_active_process(Some("kiro.exe".to_string()));
+        assert_eq!(resolve_active_process_name().as_deref(), Some("kiro.exe"));
+
+        let rule = match_app_rule(&rules, &resolve_active_process_name().unwrap()).unwrap();
+        assert_eq!(rule.id, "kiro");
+
+        set_mock_active_process(None);
     }
 
     #[test]

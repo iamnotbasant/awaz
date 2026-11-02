@@ -632,6 +632,50 @@ pub(crate) struct ResolvedPostProcessConfig {
     pub hotwords: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AppPromptRule {
+    pub id: String,
+    pub name: String,
+    pub process_names: Vec<String>,
+    pub preset_id: String,
+    pub prompt_append: String,
+    pub enabled: bool,
+    pub builtin: bool,
+}
+
+pub fn default_app_rules() -> Vec<AppPromptRule> {
+    vec![
+        AppPromptRule {
+            id: "teams".to_string(),
+            name: "Teams".to_string(),
+            process_names: vec!["teams.exe".to_string(), "ms-teams.exe".to_string()],
+            preset_id: INTENT_CLEANUP_PROMPT_ID.to_string(),
+            prompt_append: "Adapted for instant collaboration chat. Output concise, clear messages ready to send directly, keeping tone natural and avoiding email formality.".to_string(),
+            enabled: false,
+            builtin: true,
+        },
+        AppPromptRule {
+            id: "outlook".to_string(),
+            name: "Outlook".to_string(),
+            process_names: vec!["outlook.exe".to_string(), "olk.exe".to_string()],
+            preset_id: INTENT_CLEANUP_PROMPT_ID.to_string(),
+            prompt_append: "Adapted for professional email drafting. Maintain a formal, complete tone with natural paragraphing without inventing recipients or greetings.".to_string(),
+            enabled: false,
+            builtin: true,
+        },
+        AppPromptRule {
+            id: "kiro".to_string(),
+            name: "Kiro".to_string(),
+            process_names: vec!["kiro.exe".to_string()],
+            preset_id: FAITHFUL_CLEANUP_PROMPT_ID.to_string(),
+            prompt_append: "Optimized for developer tools. Preserve code, commands, filenames, paths, technical identifiers, and markdown formatting.".to_string(),
+            enabled: false,
+            builtin: true,
+        },
+    ]
+}
+
 #[derive(Debug)]
 pub(crate) struct PostProcessResolutionError {
     pub reason: PostProcessUnavailableReason,
@@ -1399,6 +1443,9 @@ pub struct AppSettings {
     /// Per-application prompt preset mapping (e.g. "Code.exe" -> "formal_english")
     #[serde(default)]
     pub app_prompt_rules: HashMap<String, String>,
+    /// Rich per-application rules with process matcher, preset override, and extra instructions
+    #[serde(default = "default_app_rules")]
+    pub app_rules: Vec<AppPromptRule>,
     /// Hotword categories (e.g. "Names", "Tech", "Places")
     #[serde(default = "default_hotword_categories")]
     pub hotword_categories: HashMap<String, Vec<String>>,
@@ -4274,6 +4321,14 @@ fn ensure_post_process_defaults(settings: &mut AppSettings) -> bool {
         changed = true;
     }
 
+    // Seed default rich app rules (Teams, Outlook, Kiro) for SayIt parity
+    for builtin_rule in default_app_rules() {
+        if !settings.app_rules.iter().any(|r| r.id == builtin_rule.id) {
+            settings.app_rules.push(builtin_rule);
+            changed = true;
+        }
+    }
+
     // Seed the "last cloud provider" memory from the current selection.
     //
     // Without this an existing install upgrades with the slot empty, so the very
@@ -4557,6 +4612,7 @@ pub fn get_default_settings() -> AppSettings {
         log_level: default_log_level(),
         custom_words: Vec::new(),
         app_prompt_rules: HashMap::new(),
+        app_rules: default_app_rules(),
         hotword_categories: default_hotword_categories(),
         waveform_style: default_waveform_style(),
         meeting_auto_detect: false,

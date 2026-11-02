@@ -9,9 +9,10 @@ import { Textarea } from "@/components/ui/Textarea";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { Segmented } from "@/components/ui/Segmented";
 import { Dialog } from "@/components/ui/Dialog";
+import { Switch } from "@/components/ui/Switch";
 import Badge from "@/components/ui/Badge";
 import { useSettings } from "@/hooks/useSettings";
-import { commands } from "@/bindings";
+import { commands, type AppPromptRule } from "@/bindings";
 
 export interface PresetDefinition {
   id: string;
@@ -92,20 +93,24 @@ export const PromptPresetManager: React.FC = () => {
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
-  // App rules state (for P5)
-  const [appRules, setAppRules] = useState<Record<string, string>>({});
-  const [newAppName, setNewAppName] = useState("");
-  const [newAppPresetId, setNewAppPresetId] = useState("hinglish_roman");
-  const [isAddingRule, setIsAddingRule] = useState(false);
+  // Rich App rules state (P5)
+  const [richRules, setRichRules] = useState<AppPromptRule[]>([]);
+  const [isRuleDialogOpen, setIsRuleDialogOpen] = useState(false);
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
+  const [ruleDraftName, setRuleDraftName] = useState("");
+  const [ruleDraftProcesses, setRuleDraftProcesses] = useState("");
+  const [ruleDraftPresetId, setRuleDraftPresetId] = useState("intent");
+  const [ruleDraftPromptAppend, setRuleDraftPromptAppend] = useState("");
+  const [isSavingRule, setIsSavingRule] = useState(false);
 
   const loadRules = async () => {
     try {
-      const res = await commands.getAppPromptRules();
+      const res = await commands.getRichAppRules();
       if (res.status === "ok") {
-        setAppRules(res.data);
+        setRichRules(res.data);
       }
     } catch (err) {
-      console.warn("Failed to load app prompt rules:", err);
+      console.warn("Failed to load rich app rules:", err);
     }
   };
 
@@ -213,39 +218,80 @@ export const PromptPresetManager: React.FC = () => {
     }
   };
 
-  const handleAddRule = async () => {
-    const cleanApp = newAppName.trim();
-    if (!cleanApp) return;
+  // Rule management functions (P5)
+  const openNewRuleDialog = () => {
+    setEditingRuleId(null);
+    setRuleDraftName("");
+    setRuleDraftProcesses("");
+    setRuleDraftPresetId("intent");
+    setRuleDraftPromptAppend("");
+    setIsRuleDialogOpen(true);
+  };
 
-    setIsAddingRule(true);
+  const openEditRuleDialog = (rule: AppPromptRule) => {
+    setEditingRuleId(rule.id);
+    setRuleDraftName(rule.name);
+    setRuleDraftProcesses(rule.processNames.join(", "));
+    setRuleDraftPresetId(rule.presetId);
+    setRuleDraftPromptAppend(rule.promptAppend);
+    setIsRuleDialogOpen(true);
+  };
+
+  const handleToggleRule = async (id: string, currentEnabled: boolean) => {
     try {
-      const res = await commands.setAppPromptRule(cleanApp, newAppPresetId);
+      const res = await commands.toggleRichAppRule(id, !currentEnabled);
       if (res.status === "ok") {
-        toast.success(
-          t("settings.presets.ruleAdded", {
-            defaultValue: `Rule added for ${cleanApp}`,
-          }),
-        );
-        setNewAppName("");
         await loadRules();
+        toast.success(
+          !currentEnabled ? "Application rule enabled" : "Application rule disabled",
+        );
+      }
+    } catch (err) {
+      toast.error(String(err));
+    }
+  };
+
+  const handleSaveRule = async () => {
+    const cleanName = ruleDraftName.trim();
+    const cleanProcesses = ruleDraftProcesses
+      .split(",")
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0);
+
+    if (!cleanName || cleanProcesses.length === 0) return;
+
+    setIsSavingRule(true);
+    try {
+      const existing = richRules.find((r) => r.id === editingRuleId);
+      const ruleToSave: AppPromptRule = {
+        id: editingRuleId || `custom_${Date.now()}`,
+        name: cleanName,
+        processNames: cleanProcesses,
+        presetId: ruleDraftPresetId,
+        promptAppend: ruleDraftPromptAppend.trim(),
+        enabled: existing ? existing.enabled : true,
+        builtin: existing ? existing.builtin : false,
+      };
+
+      const res = await commands.saveRichAppRule(ruleToSave);
+      if (res.status === "ok") {
+        toast.success(editingRuleId ? "Rule updated" : "Rule created");
+        await loadRules();
+        setIsRuleDialogOpen(false);
       }
     } catch (err) {
       toast.error(String(err));
     } finally {
-      setIsAddingRule(false);
+      setIsSavingRule(false);
     }
   };
 
-  const handleRemoveRule = async (appName: string) => {
+  const handleDeleteRule = async (id: string) => {
     try {
-      const res = await commands.removeAppPromptRule(appName);
+      const res = await commands.deleteRichAppRule(id);
       if (res.status === "ok") {
         await loadRules();
-        toast.success(
-          t("settings.presets.ruleRemoved", {
-            defaultValue: `Removed rule for ${appName}`,
-          }),
-        );
+        toast.success("Rule deleted");
       }
     } catch (err) {
       toast.error(String(err));
@@ -253,8 +299,6 @@ export const PromptPresetManager: React.FC = () => {
   };
 
   // Build the list of presets to display:
-  // 1. Built-in presets from metadata
-  // 2. Any custom presets created by user
   const customPrompts = prompts.filter((p) => !BUILTIN_IDS.has(p.id));
 
   const templateOptions = [
@@ -262,10 +306,14 @@ export const PromptPresetManager: React.FC = () => {
     ...prompts.map((p) => ({ value: p.id, label: p.name })),
   ];
 
-  const presetDropdownOptions = prompts.map((p) => ({
-    value: p.id,
-    label: p.name,
-  }));
+  const presetDropdownOptions = [
+    { value: "intent", label: "Intent cleanup" },
+    { value: "faithful", label: "Faithful cleanup" },
+    { value: "zh2en", label: "Chinese to English" },
+    { value: "casual", label: "Conversational cleanup" },
+    { value: "hinglish_roman", label: "Hinglish Roman" },
+    ...customPrompts.map((p) => ({ value: p.id, label: p.name })),
+  ];
 
   return (
     <div className="space-y-6">
@@ -494,93 +542,206 @@ export const PromptPresetManager: React.FC = () => {
         </div>
       </Dialog>
 
-      {/* Per-App Rules */}
+      {/* P5: Per-App Rules Section */}
       <div className="space-y-4 rounded-2xl border border-hairline bg-surface p-5 elev-card">
-        <div className="border-b border-hairline pb-3">
+        <div className="flex items-center justify-between border-b border-hairline pb-3">
           <div className="flex items-center gap-2">
             <AppWindow className="h-4 w-4 text-accent" />
-            <h3 className="font-semibold text-ink text-sm">
-              {t("settings.presets.appRulesTitle", {
-                defaultValue: "Per-Application Rules",
-              })}
-            </h3>
+            <div>
+              <h3 className="font-semibold text-ink text-sm">
+                {t("settings.presets.appRulesTitle", {
+                  defaultValue: "Per-Application Rules",
+                })}
+              </h3>
+              <p className="mt-0.5 text-xs text-muted">
+                {t("settings.presets.appRulesDesc", {
+                  defaultValue:
+                    "Switch presets or add prompt instructions based on the active app's process.",
+                })}
+              </p>
+            </div>
           </div>
-          <p className="mt-1 text-xs text-muted">
-            {t("settings.presets.appRulesDesc", {
-              defaultValue:
-                "Automatically apply a specific cleanup preset based on the focused window (e.g. Teams.exe, Outlook.exe, Kiro.exe).",
-            })}
-          </p>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={openNewRuleDialog}
+            className="gap-1 text-xs"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            {t("settings.presets.newRule", { defaultValue: "+ New rule" })}
+          </Button>
         </div>
 
-        {/* Existing Rules */}
-        <div className="space-y-2">
-          {Object.keys(appRules).length === 0 ? (
+        {/* Rules List */}
+        <div className="space-y-2.5">
+          {richRules.length === 0 ? (
             <p className="py-2 text-xs text-muted">
               {t("settings.presets.noRules", {
                 defaultValue: "No application rules configured yet.",
               })}
             </p>
           ) : (
-            Object.entries(appRules).map(([appName, rulePresetId]) => {
-              const matchedPreset = prompts.find((p) => p.id === rulePresetId);
+            richRules.map((rule) => {
+              const matchedPreset =
+                prompts.find((p) => p.id === rule.presetId) ||
+                BUILTIN_PRESET_METADATA.find((p) => p.id === rule.presetId);
+
               return (
                 <div
-                  key={appName}
-                  className="flex items-center justify-between rounded-lg border border-hairline bg-surface-muted px-3 py-2 text-sm"
+                  key={rule.id}
+                  className="rounded-xl border border-hairline bg-surface-muted p-3.5 text-sm transition-all"
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs font-semibold text-ink">
-                      {appName}
-                    </span>
-                    <span className="text-muted">➔</span>
-                    <span className="text-xs text-muted-soft">
-                      {matchedPreset?.name ?? rulePresetId}
-                    </span>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 flex-wrap min-w-0">
+                      <span className="font-semibold text-xs text-ink">
+                        {rule.name}
+                      </span>
+                      <Badge
+                        variant={rule.builtin ? "secondary" : "outline"}
+                        className="text-[10px] py-0 px-1.5"
+                      >
+                        {rule.builtin ? "Built in" : "Custom"}
+                      </Badge>
+                      <span className="font-mono text-[11px] text-muted bg-surface px-1.5 py-0.5 rounded border border-hairline">
+                        {rule.processNames.join(", ")}
+                      </span>
+                      <span className="text-xs text-accent font-medium">
+                        ➔{" "}
+                        {matchedPreset
+                          ? "name" in matchedPreset
+                            ? matchedPreset.name
+                            : matchedPreset.nameEn
+                          : rule.presetId}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {!rule.builtin && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0 text-muted hover:text-ink"
+                            onClick={() => openEditRuleDialog(rule)}
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0 text-muted hover:text-error"
+                            onClick={() => void handleDeleteRule(rule.id)}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </>
+                      )}
+                      <Switch
+                        checked={rule.enabled}
+                        onChange={() => void handleToggleRule(rule.id, rule.enabled)}
+                        label={`Toggle rule ${rule.name}`}
+                      />
+                    </div>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => void handleRemoveRule(appName)}
-                    className="h-6 w-6 p-0 text-muted hover:text-error"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
+
+                  {rule.promptAppend && (
+                    <p className="mt-1.5 text-xs text-muted-soft line-clamp-1 italic">
+                      "{rule.promptAppend}"
+                    </p>
+                  )}
                 </div>
               );
             })
           )}
         </div>
+      </div>
 
-        {/* Add Rule Form */}
-        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-hairline">
-          <Input
-            value={newAppName}
-            onChange={(e) => setNewAppName(e.target.value)}
-            placeholder={t("settings.presets.appPlaceholder", {
-              defaultValue: "Process name (e.g. Teams.exe)",
-            })}
-            variant="compact"
-            className="min-w-[180px] flex-1 text-xs"
-          />
-          <div className="min-w-[160px]">
-            <Dropdown
-              options={presetDropdownOptions}
-              selectedValue={newAppPresetId}
-              onSelect={(val) => setNewAppPresetId(val)}
+      {/* P5: Create/Edit Rule Dialog */}
+      <Dialog
+        open={isRuleDialogOpen}
+        onClose={() => setIsRuleDialogOpen(false)}
+        title={
+          editingRuleId
+            ? t("settings.presets.editRuleTitle", { defaultValue: "Edit Application Rule" })
+            : t("settings.presets.createRuleTitle", { defaultValue: "New Application Rule" })
+        }
+        description={t("settings.presets.ruleDialogDesc", {
+          defaultValue:
+            "Map active window executable processes to specific cleanup presets and instructions.",
+        })}
+      >
+        <div className="space-y-4 pt-2">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-ink">
+              Rule Name
+            </label>
+            <Input
+              value={ruleDraftName}
+              onChange={(e) => setRuleDraftName(e.target.value)}
+              placeholder="e.g. VS Code, Slack, WhatsApp"
+              className="text-xs"
             />
           </div>
-          <Button
-            size="sm"
-            onClick={() => void handleAddRule()}
-            disabled={!newAppName.trim() || isAddingRule}
-            className="gap-1 text-xs"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            {t("settings.presets.addRule", { defaultValue: "Add Rule" })}
-          </Button>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-ink">
+              Process Names (comma-separated)
+            </label>
+            <Input
+              value={ruleDraftProcesses}
+              onChange={(e) => setRuleDraftProcesses(e.target.value)}
+              placeholder="e.g. code.exe, Code.exe, code-insiders.exe"
+              className="text-xs font-mono"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-ink">
+              Preset Override
+            </label>
+            <Dropdown
+              options={presetDropdownOptions}
+              selectedValue={ruleDraftPresetId}
+              onSelect={(val) => setRuleDraftPresetId(val)}
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-ink">
+              Additional Prompt Instructions (Optional)
+            </label>
+            <Textarea
+              value={ruleDraftPromptAppend}
+              onChange={(e) => setRuleDraftPromptAppend(e.target.value)}
+              rows={4}
+              placeholder="e.g. Keep code formatting intact, output concise chat messages, etc."
+              className="text-xs"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-hairline">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setIsRuleDialogOpen(false)}
+              disabled={isSavingRule}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => void handleSaveRule()}
+              disabled={
+                !ruleDraftName.trim() ||
+                !ruleDraftProcesses.trim() ||
+                isSavingRule
+              }
+            >
+              {editingRuleId ? "Save Rule" : "Create Rule"}
+            </Button>
+          </div>
         </div>
-      </div>
+      </Dialog>
     </div>
   );
 };

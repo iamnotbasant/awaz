@@ -1911,6 +1911,53 @@ pub fn get_app_prompt_rules(app: AppHandle) -> Result<HashMap<String, String>, S
 
 #[tauri::command]
 #[specta::specta]
+pub fn get_rich_app_rules(app: AppHandle) -> Result<Vec<settings::AppPromptRule>, String> {
+    let s = settings::get_settings(&app);
+    Ok(s.app_rules)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn save_rich_app_rule(app: AppHandle, rule: settings::AppPromptRule) -> Result<(), String> {
+    let mut s = settings::get_settings(&app);
+    if let Some(existing) = s.app_rules.iter_mut().find(|r| r.id == rule.id) {
+        *existing = rule;
+    } else {
+        s.app_rules.push(rule);
+    }
+    settings::write_settings(&app, s);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn delete_rich_app_rule(app: AppHandle, id: String) -> Result<(), String> {
+    let mut s = settings::get_settings(&app);
+    s.app_rules.retain(|r| r.id != id);
+    settings::write_settings(&app, s);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn toggle_rich_app_rule(app: AppHandle, id: String, enabled: bool) -> Result<(), String> {
+    let mut s = settings::get_settings(&app);
+    if let Some(rule) = s.app_rules.iter_mut().find(|r| r.id == id) {
+        rule.enabled = enabled;
+        settings::write_settings(&app, s);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn set_mock_active_process_name(name: Option<String>) -> Result<(), String> {
+    crate::actions::set_mock_active_process(name);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
 pub fn set_hotword_category(
     app: AppHandle,
     category: String,

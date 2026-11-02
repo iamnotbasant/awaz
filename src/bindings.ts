@@ -805,6 +805,46 @@ async getAppPromptRules() : Promise<Result<Record<string, string>, string>> {
         else return { status: "error", error: e as any };
     }
 },
+async getRichAppRules() : Promise<Result<AppPromptRule[], string>> {
+    try {
+        return { status: "ok", data: await TAURI_INVOKE("get_rich_app_rules") };
+    } catch (e) {
+        if(e instanceof Error) throw e;
+        else return { status: "error", error: e as any };
+    }
+},
+async saveRichAppRule(rule: AppPromptRule) : Promise<Result<null, string>> {
+    try {
+        return { status: "ok", data: await TAURI_INVOKE("save_rich_app_rule", { rule }) };
+    } catch (e) {
+        if(e instanceof Error) throw e;
+        else return { status: "error", error: e as any };
+    }
+},
+async deleteRichAppRule(id: string) : Promise<Result<null, string>> {
+    try {
+        return { status: "ok", data: await TAURI_INVOKE("delete_rich_app_rule", { id }) };
+    } catch (e) {
+        if(e instanceof Error) throw e;
+        else return { status: "error", error: e as any };
+    }
+},
+async toggleRichAppRule(id: string, enabled: boolean) : Promise<Result<null, string>> {
+    try {
+        return { status: "ok", data: await TAURI_INVOKE("toggle_rich_app_rule", { id, enabled }) };
+    } catch (e) {
+        if(e instanceof Error) throw e;
+        else return { status: "error", error: e as any };
+    }
+},
+async setMockActiveProcessName(name: string | null) : Promise<Result<null, string>> {
+    try {
+        return { status: "ok", data: await TAURI_INVOKE("set_mock_active_process_name", { name }) };
+    } catch (e) {
+        if(e instanceof Error) throw e;
+        else return { status: "error", error: e as any };
+    }
+},
 async setHotwordCategory(category: string, words: string[]) : Promise<Result<null, string>> {
     try {
         return { status: "ok", data: await TAURI_INVOKE("set_hotword_category", { category, words }) };
@@ -3693,6 +3733,16 @@ historyUpdatePayload: "history-update-payload"
  * broken field can never reset the rest of the user's configuration
  * (backport of Handy #1631).
  */
+export type AppPromptRule = {
+    id: string;
+    name: string;
+    processNames: string[];
+    presetId: string;
+    promptAppend: string;
+    enabled: boolean;
+    builtin: boolean;
+};
+
 export type AppSettings = { bindings: Partial<{ [key in string]: ShortcutBinding }>; push_to_talk: boolean; audio_feedback: boolean; audio_feedback_volume?: number; sound_theme?: SoundTheme; start_hidden?: boolean; autostart_enabled?: boolean; update_checks_enabled?: boolean; selected_model?: string; always_on_microphone?: boolean; 
 /**
  * Opt-in live/streaming transcription: while recording, feed audio into a
@@ -3785,7 +3835,7 @@ assistant_overlay_style?: OverlayStyle;
 /**
  * How long the finished live-transcription card stays up before leaving.
  */
-overlay_linger?: OverlayLinger; debug_mode?: boolean; log_level?: LogLevel; custom_words?: string[]; app_prompt_rules?: Partial<{ [key in string]: string }>; hotword_categories?: Partial<{ [key in string]: string[] }>; waveform_style?: string; 
+overlay_linger?: OverlayLinger; debug_mode?: boolean; log_level?: LogLevel; custom_words?: string[]; app_prompt_rules?: Partial<{ [key in string]: string }>; app_rules?: AppPromptRule[]; hotword_categories?: Partial<{ [key in string]: string[] }>; waveform_style?: string; 
 /**
  * Offer to record when a call appears to be in progress.
  * 
