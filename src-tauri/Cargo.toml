@@ -217,7 +217,7 @@ tauri-plugin-single-instance = "2.3.2"
 tauri-plugin-updater = "2.10.0"
 
 [target.'cfg(windows)'.dependencies]
-transcribe-rs = { version = "0.3.11", features = ["whisper-vulkan", "ort-directml"] }
+transcribe-rs = { version = "0.3.11", features = ["whisper-cpp", "ort-directml"] }
 # Secure API-key storage via the Windows Credential Manager. `windows-native`
 # uses windows-sys (no extra C/system build dependency).
 keyring = { version = "3", features = ["windows-native"] }
@@ -260,15 +260,13 @@ winreg = "0.55"
 # lockfile resolves so both share one copy.
 arboard = { version = "=3.6.1", default-features = false }
 
-# transcribe.cpp Windows x86_64 backends: dynamic (loadable) backend DLLs +
-# Vulkan GPU acceleration. Build-time prereqs: cmake, Vulkan SDK, and
-# SPIRV-Headers (the Vulkan SDK bundles SPIRV-HeadersConfig.cmake; point
-# CMAKE_PREFIX_PATH at the SDK). Windows aarch64 uses the static CPU-only
-# table just below.
+# transcribe.cpp Windows x86_64 backends: dynamic (loadable) backend DLLs (CPU-only).
+# Omitting "vulkan" eliminates Vulkan SDK / SPIRV-Headers build requirement in CI,
+# matching the 0.0.1 CPU inference design posture (Intel UHD laptop budget).
+# Windows aarch64 uses the static CPU-only table just below.
 [target.'cfg(all(windows, target_arch = "x86_64"))'.dependencies]
 transcribe-cpp = { version = "0.1.2", default-features = false, features = [
   "dynamic-backends",
-  "vulkan",
 ] }
 
 # transcribe.cpp Windows aarch64 (Windows-on-ARM): STATIC, CPU-only (no
