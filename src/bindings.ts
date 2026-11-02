@@ -4831,7 +4831,15 @@ export type HistoryEntry = { id: number; file_name: string; timestamp: number; s
  * was already finished) is kept so it can be recovered; History shows it
  * as dismissed rather than as text.
  */
-dismissed: boolean }
+dismissed: boolean;
+stt_provider?: string | null;
+stt_model?: string | null;
+stt_duration_ms?: number | null;
+cleanup_provider?: string | null;
+cleanup_model?: string | null;
+cleanup_duration_ms?: number | null;
+cleanup_status?: string | null;
+cleanup_error?: string | null; }
 export type HistoryUpdatePayload = { action: "added"; entry: HistoryEntry } | { action: "updated"; entry: HistoryEntry } | { action: "deleted"; id: number } | { action: "toggled"; id: number }
 /**
  * Result of changing keyboard implementation

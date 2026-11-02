@@ -1510,13 +1510,9 @@ pub struct AppSettings {
     pub auto_submit_key: AutoSubmitKey,
     #[serde(default = "default_post_process_enabled")]
     pub post_process_enabled: bool,
-    /// Which shortcut runs AI cleanup. Off (the default): cleanup has its own
-    /// shortcut, `transcribe_with_post_process`, and plain dictation stays plain.
-    /// On: the dictation shortcut cleans up every dictation, and the separate
-    /// cleanup shortcut is unregistered, so there is one combo to remember.
-    /// Only matters while `post_process_enabled` is on; see
-    /// [`cleanup_on_dictation`] and [`cleanup_binding_active`].
-    #[serde(default)]
+    /// Which shortcut runs AI cleanup. In Awaz 0.0.1, defaults to true so that
+    /// the dictation shortcut (Ctrl+D) cleans up every dictation into Roman Hinglish.
+    #[serde(default = "default_post_process_on_dictation")]
     pub post_process_on_dictation: bool,
     #[serde(default = "default_post_process_provider_id")]
     pub post_process_provider_id: String,
@@ -1991,12 +1987,13 @@ fn default_sound_theme() -> SoundTheme {
 }
 
 fn default_post_process_enabled() -> bool {
-    // AI Correction is a first-class feature (no longer gated behind
-    // Experimental), but it stays OFF by default — the user opts in from the
-    // enable toggle on the Post Process settings page. It's only ever invoked
-    // by its dedicated hotkey, and no-ops (pasting the raw transcription) until
-    // a provider/model is configured.
-    false
+    // In Awaz 0.0.1, Roman Hinglish cleanup is the core experience and ON by default (D3, D17).
+    true
+}
+
+fn default_post_process_on_dictation() -> bool {
+    // In Awaz 0.0.1, the dictation shortcut (Ctrl+D) cleans up into Roman Hinglish by default.
+    true
 }
 
 /// Whether the dictation shortcut itself runs AI cleanup.
@@ -2562,7 +2559,7 @@ pub fn default_cloud_stt_providers() -> Vec<CloudSttProvider> {
         CloudSttProvider {
             id: "gemini".to_string(),
             label: "Gemini".to_string(),
-            base_url: "https://generativelanguage.googleapis.com/v1beta/openai".to_string(),
+            base_url: "https://generativelanguage.googleapis.com/v1beta".to_string(),
             allow_base_url_edit: false,
             kind: CloudSttKind::Gemini,
             default_model: "gemini-3.5-transcribe".to_string(),
@@ -4199,6 +4196,12 @@ fn ensure_post_process_defaults(settings: &mut AppSettings) -> bool {
         changed = true;
     }
 
+    // In Awaz 0.0.1, the dictation shortcut cleans up into Roman Hinglish by default (D3, D17).
+    if !settings.post_process_on_dictation {
+        settings.post_process_on_dictation = true;
+        changed = true;
+    }
+
     changed
 }
 
@@ -4396,7 +4399,7 @@ pub fn get_default_settings() -> AppSettings {
         auto_submit: default_auto_submit(),
         auto_submit_key: AutoSubmitKey::default(),
         post_process_enabled: default_post_process_enabled(),
-        post_process_on_dictation: false,
+        post_process_on_dictation: default_post_process_on_dictation(),
         post_process_provider_id: default_post_process_provider_id(),
         post_process_providers: default_post_process_providers(),
         post_process_api_keys: default_post_process_api_keys(),

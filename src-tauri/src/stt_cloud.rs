@@ -896,7 +896,10 @@ pub(crate) fn transcribe_gemini_sample_blocking(
 /// (see [`remember_mp3_rejected`]), so the rejection is paid for once rather than
 /// on every recording.
 fn upload_format_for(request: &CloudRequest) -> UploadFormat {
-    if request.provider_id == "custom" || mp3_was_rejected(request) {
+    if request.provider_id == "custom"
+        || request.kind == CloudSttKind::Gemini
+        || mp3_was_rejected(request)
+    {
         UploadFormat::Wav
     } else {
         UploadFormat::Mp3
@@ -1357,7 +1360,11 @@ impl CloudRequest {
         }
         let mime: &'static str = match audio.format {
             UploadFormat::Wav => "audio/wav",
-            UploadFormat::Mp3 => "audio/mp3",
+            UploadFormat::Mp3 => "audio/mpeg",
+        };
+        let file_ext = match audio.format {
+            UploadFormat::Wav => "wav",
+            UploadFormat::Mp3 => "mp3",
         };
         let since_epoch = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -1366,10 +1373,10 @@ impl CloudRequest {
 
         // 1. Upload via the Files API (multipart: metadata + file).
         let metadata = serde_json::json!({
-            "file": { "display_name": format!("awaz-{since_epoch}.wav") }
+            "file": { "display_name": format!("awaz-{since_epoch}.{file_ext}") }
         });
         let file_part = reqwest::multipart::Part::bytes(audio.bytes)
-            .file_name("audio.wav")
+            .file_name(format!("audio.{file_ext}"))
             .mime_str(mime)
             .map_err(|e| format!("Failed to attach audio: {e}"))?;
         let meta_part = reqwest::multipart::Part::text(metadata.to_string())
@@ -1391,7 +1398,7 @@ impl CloudRequest {
             let status = upload_resp.status();
             let body = upload_resp.text().await.unwrap_or_default();
             return Err(format!(
-                "Upload failed ({status}): {}",
+                "Gemini upload returned {status}: {}",
                 body.chars().take(300).collect::<String>()
             ));
         }
@@ -1399,6 +1406,8 @@ impl CloudRequest {
         struct UploadedFile {
             name: String,
             uri: String,
+            #[serde(default)]
+            state: Option<String>,
         }
         #[derive(Deserialize)]
         struct UploadResponse {
@@ -1406,39 +1415,41 @@ impl CloudRequest {
         }
         let uploaded: UploadResponse = self.parse_json(upload_resp).await?;
         let (file_name, file_uri) = (uploaded.file.name, uploaded.file.uri);
+        let mut active = uploaded.file.state.as_deref() == Some("ACTIVE");
 
-        // 2. Wait until the file is ACTIVE.
+        // 2. Wait until the file is ACTIVE (if not already active).
         #[derive(Deserialize)]
         struct FileState {
             #[serde(default)]
             state: Option<String>,
         }
-        let mut active = false;
-        for _ in 0..60 {
-            let state_resp = self
-                .client()?
-                .get(format!("{API_BASE}/{file_name}"))
-                .timeout(Duration::from_secs(30))
-                .header("x-goog-api-key", &key)
-                .send()
-                .await
-                .map_err(|e| self.network_error(e))?;
-            let st: FileState = self.parse_json(state_resp).await?;
-            match st.state.as_deref() {
-                Some("ACTIVE") => {
-                    active = true;
-                    break;
+        if !active {
+            for _ in 0..60 {
+                let state_resp = self
+                    .client()?
+                    .get(format!("{API_BASE}/{file_name}"))
+                    .timeout(Duration::from_secs(30))
+                    .header("x-goog-api-key", &key)
+                    .send()
+                    .await
+                    .map_err(|e| self.network_error(e))?;
+                let st: FileState = self.parse_json(state_resp).await?;
+                match st.state.as_deref() {
+                    Some("ACTIVE") => {
+                        active = true;
+                        break;
+                    }
+                    Some("FAILED") => {
+                        let _ = self.delete_gemini_file(API_BASE, &key, &file_name).await;
+                        return Err("Gemini audio processing failed (FAILED)".to_string());
+                    }
+                    _ => tokio::time::sleep(Duration::from_millis(500)).await,
                 }
-                Some("FAILED") => {
-                    let _ = self.delete_gemini_file(API_BASE, &key, &file_name).await;
-                    return Err("Audio process nahi ho paya (FAILED).".to_string());
-                }
-                _ => std::thread::sleep(Duration::from_secs(1)),
             }
         }
         if !active {
             let _ = self.delete_gemini_file(API_BASE, &key, &file_name).await;
-            return Err("Audio ready hone me bahut time lag gaya.".to_string());
+            return Err("Gemini audio processing timed out waiting for ACTIVE state".to_string());
         }
 
         // 3. Transcribe via /v1beta/interactions (SMART, hi-Latn + en-IN).
@@ -1484,7 +1495,7 @@ impl CloudRequest {
             let body = resp.text().await.unwrap_or_default();
             let _ = self.delete_gemini_file(API_BASE, &key, &file_name).await;
             return Err(format!(
-                "Transcribe failed ({status}): {}",
+                "Gemini transcribe returned {status}: {}",
                 body.chars().take(400).collect::<String>()
             ));
         }
@@ -1996,6 +2007,46 @@ mod tests {
         assert_eq!(cfg.provider.kind, CloudSttKind::Gemini);
         assert_eq!(cfg.model, "gemini-3.5-transcribe");
         assert_eq!(cfg.api_key, "test-gemini-key");
+        assert_eq!(upload_format_for(&cfg), UploadFormat::Wav);
+        assert_eq!(
+            cfg.base_url,
+            "https://generativelanguage.googleapis.com/v1beta"
+        );
+    }
+
+    #[test]
+    fn gemini_stt_request_format_and_hi_latn_lock() {
+        let mut settings = get_default_settings();
+        settings.stt_engine_mode = SttEngineMode::Cloud;
+        settings.cloud_stt_provider_id = "gemini".to_string();
+        settings
+            .cloud_stt_api_keys
+            .insert("gemini".to_string(), "test-gemini-key".to_string());
+        let cfg = resolve_cloud_stt(&settings).expect("gemini should resolve");
+        assert_eq!(upload_format_for(&cfg), UploadFormat::Wav);
+
+        // Verify native interactions payload carries hi-Latn and en-IN lock
+        let payload = serde_json::json!({
+            "model": cfg.model,
+            "input": [
+                {
+                    "type": "audio",
+                    "file_uri": "https://generativelanguage.googleapis.com/v1beta/files/test1234"
+                }
+            ],
+            "generation_config": {
+                "response_modalities": ["TEXT"],
+                "speech_config": {
+                    "language_codes": ["hi-Latn", "en-IN"],
+                    "mode": "smart"
+                }
+            }
+        });
+        let lang_codes = payload["generation_config"]["speech_config"]["language_codes"]
+            .as_array()
+            .unwrap();
+        assert_eq!(lang_codes[0], "hi-Latn");
+        assert_eq!(lang_codes[1], "en-IN");
     }
 
     #[test]

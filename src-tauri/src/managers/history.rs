@@ -102,6 +102,18 @@ static MIGRATIONS: &[M] = &[
                 AND json_array_length(messages) > 2
                 AND instr(messages, '<selected_text>') = 0);",
     ),
+    // Awaz 0.0.1: Per-entry diagnostics (STT provider/model/latency, Cleanup provider/model/latency,
+    // cleanup status, and cleanup error for visible failure reporting).
+    M::up(
+        "ALTER TABLE transcription_history ADD COLUMN stt_provider TEXT;
+         ALTER TABLE transcription_history ADD COLUMN stt_model TEXT;
+         ALTER TABLE transcription_history ADD COLUMN stt_duration_ms INTEGER;
+         ALTER TABLE transcription_history ADD COLUMN cleanup_provider TEXT;
+         ALTER TABLE transcription_history ADD COLUMN cleanup_model TEXT;
+         ALTER TABLE transcription_history ADD COLUMN cleanup_duration_ms INTEGER;
+         ALTER TABLE transcription_history ADD COLUMN cleanup_status TEXT;
+         ALTER TABLE transcription_history ADD COLUMN cleanup_error TEXT;",
+    ),
 ];
 
 /// Every `transcription_history` column [`HistoryManager::map_history_entry`]
@@ -110,7 +122,9 @@ static MIGRATIONS: &[M] = &[
 macro_rules! entry_columns {
     () => {
         "id, file_name, timestamp, saved, title, transcription_text, post_processed_text, \
-         post_process_prompt, post_process_requested, dismissed"
+         post_process_prompt, post_process_requested, dismissed, \
+         stt_provider, stt_model, stt_duration_ms, cleanup_provider, cleanup_model, \
+         cleanup_duration_ms, cleanup_status, cleanup_error"
     };
 }
 
@@ -248,6 +262,14 @@ pub struct HistoryEntry {
     /// was already finished) is kept so it can be recovered; History shows it
     /// as dismissed rather than as text.
     pub dismissed: bool,
+    pub stt_provider: Option<String>,
+    pub stt_model: Option<String>,
+    pub stt_duration_ms: Option<i64>,
+    pub cleanup_provider: Option<String>,
+    pub cleanup_model: Option<String>,
+    pub cleanup_duration_ms: Option<i64>,
+    pub cleanup_status: Option<String>,
+    pub cleanup_error: Option<String>,
 }
 
 /// What a dictation finally produced, written over a row that already exists:
@@ -260,6 +282,14 @@ pub struct EntryOutcome {
     pub post_process_prompt: Option<String>,
     pub post_process_requested: bool,
     pub dismissed: bool,
+    pub stt_provider: Option<String>,
+    pub stt_model: Option<String>,
+    pub stt_duration_ms: Option<i64>,
+    pub cleanup_provider: Option<String>,
+    pub cleanup_model: Option<String>,
+    pub cleanup_duration_ms: Option<i64>,
+    pub cleanup_status: Option<String>,
+    pub cleanup_error: Option<String>,
 }
 
 impl From<&HistoryEntry> for EntryOutcome {
@@ -270,6 +300,14 @@ impl From<&HistoryEntry> for EntryOutcome {
             post_process_prompt: entry.post_process_prompt.clone(),
             post_process_requested: entry.post_process_requested,
             dismissed: entry.dismissed,
+            stt_provider: entry.stt_provider.clone(),
+            stt_model: entry.stt_model.clone(),
+            stt_duration_ms: entry.stt_duration_ms,
+            cleanup_provider: entry.cleanup_provider.clone(),
+            cleanup_model: entry.cleanup_model.clone(),
+            cleanup_duration_ms: entry.cleanup_duration_ms,
+            cleanup_status: entry.cleanup_status.clone(),
+            cleanup_error: entry.cleanup_error.clone(),
         }
     }
 }
@@ -536,14 +574,30 @@ fn write_outcome(
              post_processed_text = ?2,
              post_process_prompt = ?3,
              post_process_requested = ?4,
-             dismissed = ?5
-         WHERE id = ?6",
+             dismissed = ?5,
+             stt_provider = ?6,
+             stt_model = ?7,
+             stt_duration_ms = ?8,
+             cleanup_provider = ?9,
+             cleanup_model = ?10,
+             cleanup_duration_ms = ?11,
+             cleanup_status = ?12,
+             cleanup_error = ?13
+         WHERE id = ?14",
         params![
             outcome.transcription_text,
             outcome.post_processed_text,
             outcome.post_process_prompt,
             outcome.post_process_requested,
             outcome.dismissed,
+            outcome.stt_provider,
+            outcome.stt_model,
+            outcome.stt_duration_ms,
+            outcome.cleanup_provider,
+            outcome.cleanup_model,
+            outcome.cleanup_duration_ms,
+            outcome.cleanup_status,
+            outcome.cleanup_error,
             id
         ],
     )?;
@@ -872,6 +926,14 @@ impl HistoryManager {
             post_process_prompt: row.get("post_process_prompt")?,
             post_process_requested: row.get("post_process_requested")?,
             dismissed: row.get("dismissed")?,
+            stt_provider: row.get("stt_provider").unwrap_or(None),
+            stt_model: row.get("stt_model").unwrap_or(None),
+            stt_duration_ms: row.get("stt_duration_ms").unwrap_or(None),
+            cleanup_provider: row.get("cleanup_provider").unwrap_or(None),
+            cleanup_model: row.get("cleanup_model").unwrap_or(None),
+            cleanup_duration_ms: row.get("cleanup_duration_ms").unwrap_or(None),
+            cleanup_status: row.get("cleanup_status").unwrap_or(None),
+            cleanup_error: row.get("cleanup_error").unwrap_or(None),
         })
     }
 
@@ -914,19 +976,11 @@ impl HistoryManager {
         Ok(compute_usage_stats(&conn, Local::now().date_naive())?)
     }
 
-    /// Save a new history entry to the database.
-    /// The WAV file should already have been written to the recordings directory.
-    ///
-    /// A `dismissed` entry is a cancelled dictation kept for recovery. It is not
-    /// counted toward usage until [`Self::record_outcome`] recovers it.
-    pub fn save_entry(
+    /// Save a new history entry with full outcome diagnostics to the database.
+    pub fn save_entry_outcome(
         &self,
         file_name: String,
-        transcription_text: String,
-        post_process_requested: bool,
-        post_processed_text: Option<String>,
-        post_process_prompt: Option<String>,
-        dismissed: bool,
+        outcome: EntryOutcome,
     ) -> Result<HistoryEntry> {
         let timestamp = Utc::now().timestamp();
         let title = self.format_timestamp_title(timestamp);
@@ -942,26 +996,42 @@ impl HistoryManager {
                 post_processed_text,
                 post_process_prompt,
                 post_process_requested,
-                dismissed
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                dismissed,
+                stt_provider,
+                stt_model,
+                stt_duration_ms,
+                cleanup_provider,
+                cleanup_model,
+                cleanup_duration_ms,
+                cleanup_status,
+                cleanup_error
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
             params![
                 &file_name,
                 timestamp,
                 false,
                 &title,
-                &transcription_text,
-                &post_processed_text,
-                &post_process_prompt,
-                post_process_requested,
-                dismissed,
+                &outcome.transcription_text,
+                &outcome.post_processed_text,
+                &outcome.post_process_prompt,
+                outcome.post_process_requested,
+                outcome.dismissed,
+                &outcome.stt_provider,
+                &outcome.stt_model,
+                outcome.stt_duration_ms,
+                &outcome.cleanup_provider,
+                &outcome.cleanup_model,
+                outcome.cleanup_duration_ms,
+                &outcome.cleanup_status,
+                &outcome.cleanup_error,
             ],
         )?;
 
         // Capture the id before touching usage: the usage UPSERT is an insert
         // too and would move `last_insert_rowid`.
         let id = conn.last_insert_rowid();
-        if !dismissed {
-            self.record_new_entry_usage(&conn, timestamp, &file_name, &transcription_text);
+        if !outcome.dismissed {
+            self.record_new_entry_usage(&conn, timestamp, &file_name, &outcome.transcription_text);
         }
 
         let entry = HistoryEntry {
@@ -970,20 +1040,26 @@ impl HistoryManager {
             timestamp,
             saved: false,
             title,
-            transcription_text,
-            post_processed_text,
-            post_process_prompt,
-            post_process_requested,
-            dismissed,
+            transcription_text: outcome.transcription_text,
+            post_processed_text: outcome.post_processed_text,
+            post_process_prompt: outcome.post_process_prompt,
+            post_process_requested: outcome.post_process_requested,
+            dismissed: outcome.dismissed,
+            stt_provider: outcome.stt_provider,
+            stt_model: outcome.stt_model,
+            stt_duration_ms: outcome.stt_duration_ms,
+            cleanup_provider: outcome.cleanup_provider,
+            cleanup_model: outcome.cleanup_model,
+            cleanup_duration_ms: outcome.cleanup_duration_ms,
+            cleanup_status: outcome.cleanup_status,
+            cleanup_error: outcome.cleanup_error,
         };
 
         debug!("Saved history entry with id {}", entry.id);
         drop(conn);
 
         // Publish the new row immediately, then enforce retention on every
-        // insert. Previously the configured limit was only applied at startup
-        // or when the setting changed, so a running session could grow without
-        // bound and the History panel drifted away from the selected count.
+        // insert.
         if let Err(e) = (HistoryUpdatePayload::Added {
             entry: entry.clone(),
         })
@@ -994,9 +1070,6 @@ impl HistoryManager {
 
         match self.cleanup_old_entries() {
             Ok(pruned) if pruned > 0 => {
-                // The frontend refetches its first page so rows removed by
-                // retention disappear immediately instead of lingering until
-                // the History section is reopened.
                 if let Err(e) = self.app_handle.emit("history-retention-applied", ()) {
                     error!("Failed to emit retention update: {}", e);
                 }
@@ -1006,6 +1079,40 @@ impl HistoryManager {
         }
 
         Ok(entry)
+    }
+
+    /// Save a new history entry to the database.
+    /// The WAV file should already have been written to the recordings directory.
+    ///
+    /// A `dismissed` entry is a cancelled dictation kept for recovery. It is not
+    /// counted toward usage until [`Self::record_outcome`] recovers it.
+    pub fn save_entry(
+        &self,
+        file_name: String,
+        transcription_text: String,
+        post_process_requested: bool,
+        post_processed_text: Option<String>,
+        post_process_prompt: Option<String>,
+        dismissed: bool,
+    ) -> Result<HistoryEntry> {
+        self.save_entry_outcome(
+            file_name,
+            EntryOutcome {
+                transcription_text,
+                post_processed_text,
+                post_process_prompt,
+                post_process_requested,
+                dismissed,
+                stt_provider: None,
+                stt_model: None,
+                stt_duration_ms: None,
+                cleanup_provider: None,
+                cleanup_model: None,
+                cleanup_duration_ms: None,
+                cleanup_status: None,
+                cleanup_error: None,
+            },
+        )
     }
 
     /// Overwrite an existing row with what its dictation finally produced: a

@@ -11,6 +11,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { readFile } from "@tauri-apps/plugin-fs";
 import {
+  AlertCircle,
   ArrowUpRight,
   Camera,
   Check,
@@ -1103,6 +1104,86 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
       }
     >
       {body}
+
+      {/* eslint-disable i18next/no-literal-string */}
+      {entry.cleanup_error && (
+        <div className="mt-2 flex items-center gap-1.5 rounded border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-600 dark:text-amber-400">
+          <AlertCircle width={14} height={14} className="shrink-0" />
+          <span>
+            <strong>AI Cleanup Failed:</strong> {entry.cleanup_error} (Showing
+            raw transcript)
+          </span>
+        </div>
+      )}
+
+      {(entry.stt_provider ||
+        entry.cleanup_provider ||
+        entry.stt_duration_ms != null ||
+        entry.cleanup_duration_ms != null) && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+          {entry.stt_provider && (
+            <span className="inline-flex items-center gap-1 rounded border border-hairline bg-surface px-1.5 py-0.5 text-muted-soft">
+              <span className="font-medium text-muted">ASR:</span>
+              <span>{entry.stt_provider}</span>
+              {entry.stt_model && (
+                <span className="text-muted">({entry.stt_model})</span>
+              )}
+              {entry.stt_duration_ms != null && (
+                <span className="text-muted">
+                  · {(entry.stt_duration_ms / 1000).toFixed(1)}s
+                </span>
+              )}
+            </span>
+          )}
+          {(entry.cleanup_provider || entry.cleanup_status) && (
+            <span
+              className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 ${
+                entry.cleanup_status === "applied"
+                  ? "border-hairline bg-surface text-muted-soft"
+                  : "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+              }`}
+            >
+              <span className="font-medium">AI:</span>
+              {entry.cleanup_provider && <span>{entry.cleanup_provider}</span>}
+              {entry.cleanup_model && (
+                <span className="opacity-80">({entry.cleanup_model})</span>
+              )}
+              {entry.cleanup_duration_ms != null && (
+                <span className="opacity-80">
+                  · {(entry.cleanup_duration_ms / 1000).toFixed(1)}s
+                </span>
+              )}
+              {entry.cleanup_status && entry.cleanup_status !== "applied" && (
+                <span className="font-semibold uppercase text-[10px]">
+                  ({entry.cleanup_status})
+                </span>
+              )}
+            </span>
+          )}
+        </div>
+      )}
+      {/* eslint-enable i18next/no-literal-string */}
+
+      {originalText && (
+        <button
+          type="button"
+          onClick={() => setShowOriginal((v) => !v)}
+          className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-muted hover:text-ink transition-colors"
+        >
+          {showOriginal ? (
+            <EyeOff width={12} height={12} />
+          ) : (
+            <Eye width={12} height={12} />
+          )}
+          <span>
+            {showOriginal
+              ? t("historyPage.hideOriginal")
+              : flowEntry
+                ? t("historyPage.showSaid")
+                : t("historyPage.showOriginal")}
+          </span>
+        </button>
+      )}
 
       {showOriginal && originalText && (
         <div className="mt-2.5 max-w-[75ch] rounded-lg border border-hairline bg-canvas px-3 py-2.5">

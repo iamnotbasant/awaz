@@ -2905,6 +2905,35 @@ impl ShortcutAction for TranscribeAction {
                 }
             };
 
+            let stt_duration_ms = transcription_time.elapsed().as_millis() as i64;
+            let settings = crate::settings::get_settings(&ah);
+            let (stt_provider, stt_model) = match settings.stt_engine_mode {
+                crate::settings::SttEngineMode::Local => (
+                    Some("Local".to_string()),
+                    if settings.selected_model.is_empty() {
+                        None
+                    } else {
+                        Some(settings.selected_model.clone())
+                    },
+                ),
+                crate::settings::SttEngineMode::Cloud => {
+                    let provider = settings
+                        .cloud_stt_providers
+                        .iter()
+                        .find(|p| p.id == settings.cloud_stt_provider_id);
+                    let provider_label = provider
+                        .map(|p| p.label.clone())
+                        .unwrap_or_else(|| settings.cloud_stt_provider_id.clone());
+                    let model = settings
+                        .cloud_stt_models
+                        .get(&settings.cloud_stt_provider_id)
+                        .cloned()
+                        .filter(|m| !m.trim().is_empty())
+                        .or_else(|| provider.map(|p| p.default_model.clone()));
+                    (Some(provider_label), model)
+                }
+            };
+
             let dictation = Dictation {
                 app: ah.clone(),
                 hm,
@@ -2916,6 +2945,9 @@ impl ShortcutAction for TranscribeAction {
                 flow_cancel_generation,
                 fresh: true,
                 transcribed_on_fallback: cloud_fell_back,
+                stt_provider,
+                stt_model,
+                stt_duration_ms: Some(stt_duration_ms),
             };
 
             match transcription_result {
@@ -2969,14 +3001,7 @@ impl HistorySlot {
             HistorySlot::New {
                 file_name,
                 wav_saved: true,
-            } => hm.save_entry(
-                file_name,
-                outcome.transcription_text,
-                outcome.post_process_requested,
-                outcome.post_processed_text,
-                outcome.post_process_prompt,
-                outcome.dismissed,
-            ),
+            } => hm.save_entry_outcome(file_name, outcome),
             HistorySlot::Existing(id) => hm.record_outcome(id, outcome),
             HistorySlot::New {
                 wav_saved: false, ..
@@ -3011,6 +3036,9 @@ struct Dictation {
     /// Said on the pill, so a failing key or network is noticed on the first
     /// dictation rather than discovered weeks later in the log.
     transcribed_on_fallback: bool,
+    stt_provider: Option<String>,
+    stt_model: Option<String>,
+    stt_duration_ms: Option<i64>,
 }
 
 impl Dictation {
@@ -3055,6 +3083,9 @@ impl Dictation {
             transcription_text: transcription.clone(),
             post_process_requested: self.context.post_process,
             dismissed: true,
+            stt_provider: self.stt_provider.clone(),
+            stt_model: self.stt_model.clone(),
+            stt_duration_ms: self.stt_duration_ms,
             ..EntryOutcome::default()
         };
         self.dismiss(Remaining::Deliver(transcription), outcome);
@@ -3202,6 +3233,65 @@ async fn deliver_transcription(d: Dictation, transcription: String) {
         overlay_notice = Some("cloudSttFellBack");
     }
 
+    let (cleanup_status, cleanup_error) = if post_process {
+        if processed
+            .post_process_result
+            .as_ref()
+            .map(|r| r.applied)
+            .unwrap_or(false)
+        {
+            (Some("applied".to_string()), None)
+        } else if let Some(meta) = &processed.post_process_result {
+            let (status, err) = match meta.fallback_reason {
+                Some(PostProcessFallbackReason::Timeout) => ("timed_out", "AI cleanup timed out."),
+                Some(PostProcessFallbackReason::MissingApiKey) => {
+                    ("failed", "Missing API key for cleanup provider.")
+                }
+                Some(PostProcessFallbackReason::Authentication) => {
+                    ("failed", "Authentication failed. Check API key.")
+                }
+                Some(PostProcessFallbackReason::ModelUnavailable) => (
+                    "failed",
+                    "Cleanup model is unavailable or rejected by provider.",
+                ),
+                Some(PostProcessFallbackReason::ProviderError) => {
+                    ("failed", "Provider error or quota exceeded.")
+                }
+                Some(PostProcessFallbackReason::InvalidResponse) => {
+                    ("failed", "Invalid response received from cleanup model.")
+                }
+                Some(PostProcessFallbackReason::EmptyResponse) => {
+                    ("failed", "Empty response received from cleanup model.")
+                }
+                Some(PostProcessFallbackReason::NotConfigured) => {
+                    ("unavailable", "AI cleanup is not configured.")
+                }
+                None => ("failed", "AI cleanup failed."),
+            };
+            (Some(status.to_string()), Some(err.to_string()))
+        } else {
+            (
+                Some("unavailable".to_string()),
+                Some("AI cleanup unavailable.".to_string()),
+            )
+        }
+    } else {
+        (None, None)
+    };
+
+    let cleanup_provider = processed
+        .post_process_result
+        .as_ref()
+        .and_then(|r| r.provider_id.clone());
+    let cleanup_model = processed
+        .post_process_result
+        .as_ref()
+        .and_then(|r| r.model.clone());
+    let cleanup_duration_ms = processed
+        .post_process_result
+        .as_ref()
+        .map(|r| r.elapsed_ms as i64);
+
     let row = d.history.write(
         &d.hm,
         EntryOutcome {
@@ -3210,6 +3300,14 @@ async fn deliver_transcription(d: Dictation, transcription: String) {
             post_process_prompt: processed.post_process_prompt,
             post_process_requested: post_process,
             dismissed: false,
+            stt_provider: d.stt_provider,
+            stt_model: d.stt_model,
+            stt_duration_ms: d.stt_duration_ms,
+            cleanup_provider,
+            cleanup_model,
+            cleanup_duration_ms,
+            cleanup_status,
+            cleanup_error,
         },
     );
 
@@ -3441,6 +3539,9 @@ fn transcription_failed(d: Dictation, samples: Option<Arc<Vec<f32>>>, err: &anyh
         &d.hm,
         EntryOutcome {
             post_process_requested: d.context.post_process,
+            stt_provider: d.stt_provider.clone(),
+            stt_model: d.stt_model.clone(),
+            stt_duration_ms: d.stt_duration_ms,
             ..EntryOutcome::default()
         },
     );
@@ -3627,6 +3728,9 @@ async fn run_recovery(app: AppHandle, offer: Offer) {
         flow_cancel_generation,
         fresh: false,
         transcribed_on_fallback: false,
+        stt_provider: None,
+        stt_model: None,
+        stt_duration_ms: None,
     };
 
     match remaining {
@@ -3637,6 +3741,7 @@ async fn run_recovery(app: AppHandle, offer: Offer) {
                 tm.initiate_model_load();
             }
             let audio = Arc::clone(&samples);
+            let transcribe_start = Instant::now();
             let (result, fell_back) = tauri::async_runtime::spawn_blocking(move || {
                 let result = tm.transcribe(audio.to_vec());
                 (
@@ -3652,6 +3757,36 @@ async fn run_recovery(app: AppHandle, offer: Offer) {
                 )
             });
             dictation.transcribed_on_fallback = fell_back;
+            dictation.stt_duration_ms = Some(transcribe_start.elapsed().as_millis() as i64);
+            let settings = crate::settings::get_settings(&app);
+            let (stt_p, stt_m) = match settings.stt_engine_mode {
+                crate::settings::SttEngineMode::Local => (
+                    Some("Local".to_string()),
+                    if settings.selected_model.is_empty() {
+                        None
+                    } else {
+                        Some(settings.selected_model.clone())
+                    },
+                ),
+                crate::settings::SttEngineMode::Cloud => {
+                    let provider = settings
+                        .cloud_stt_providers
+                        .iter()
+                        .find(|p| p.id == settings.cloud_stt_provider_id);
+                    let provider_label = provider
+                        .map(|p| p.label.clone())
+                        .unwrap_or_else(|| settings.cloud_stt_provider_id.clone());
+                    let model = settings
+                        .cloud_stt_models
+                        .get(&settings.cloud_stt_provider_id)
+                        .cloned()
+                        .filter(|m| !m.trim().is_empty())
+                        .or_else(|| provider.map(|p| p.default_model.clone()));
+                    (Some(provider_label), model)
+                }
+            };
+            dictation.stt_provider = stt_p;
+            dictation.stt_model = stt_m;
             match result {
                 Ok(transcription) => {
                     debug!(
