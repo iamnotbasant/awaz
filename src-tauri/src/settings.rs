@@ -1452,6 +1452,18 @@ pub struct AppSettings {
     /// Custom waveform style ("bars", "smooth", "dots")
     #[serde(default = "default_waveform_style")]
     pub waveform_style: String,
+    /// SayIt overlay waveform theme: "black-white", "black-blue", "black-rainbow"
+    #[serde(default = "default_overlay_waveform_theme")]
+    pub overlay_waveform_theme: String,
+    /// SayIt overlay width preset: "long", "medium", "short"
+    #[serde(default = "default_overlay_width")]
+    pub overlay_width: String,
+    /// SayIt show elapsed duration timer on overlay
+    #[serde(default = "default_overlay_show_duration")]
+    pub overlay_show_duration: bool,
+    /// SayIt show live streaming captions bubble on overlay
+    #[serde(default = "default_overlay_streaming_display")]
+    pub overlay_streaming_display: bool,
     /// Offer to record when a call appears to be in progress.
     ///
     /// **Off by default; the user opts in.** The detector's only output is a
@@ -3547,6 +3559,22 @@ pub fn default_waveform_style() -> String {
     "bars".to_string()
 }
 
+pub fn default_overlay_waveform_theme() -> String {
+    "black-rainbow".to_string()
+}
+
+pub fn default_overlay_width() -> String {
+    "medium".to_string()
+}
+
+pub fn default_overlay_show_duration() -> bool {
+    true
+}
+
+pub fn default_overlay_streaming_display() -> bool {
+    true
+}
+
 fn default_typing_tool() -> TypingTool {
     TypingTool::Auto
 }
@@ -4615,6 +4643,10 @@ pub fn get_default_settings() -> AppSettings {
         app_rules: default_app_rules(),
         hotword_categories: default_hotword_categories(),
         waveform_style: default_waveform_style(),
+        overlay_waveform_theme: default_overlay_waveform_theme(),
+        overlay_width: default_overlay_width(),
+        overlay_show_duration: default_overlay_show_duration(),
+        overlay_streaming_display: default_overlay_streaming_display(),
         meeting_auto_detect: false,
         meeting_show_indicator: false,
         meeting_opt_in_defaults_applied: true,

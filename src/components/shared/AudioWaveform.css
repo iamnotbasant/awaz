@@ -11,16 +11,34 @@
   height: 38px;
 }
 .audio-waveform .wave-base {
-  stop-color: #c3a374;
+  stop-color: #4ade80;
 }
 .audio-waveform .wave-tip {
-  stop-color: #f4e7ce;
+  stop-color: #38bdf8;
+}
+.audio-waveform[data-waveform-theme="black-white"] .wave-base {
+  stop-color: #cbd5e1;
+}
+.audio-waveform[data-waveform-theme="black-white"] .wave-tip {
+  stop-color: #ffffff;
+}
+.audio-waveform[data-waveform-theme="black-blue"] .wave-base {
+  stop-color: #22d3ee;
+}
+.audio-waveform[data-waveform-theme="black-blue"] .wave-tip {
+  stop-color: #6366f1;
+}
+.audio-waveform[data-waveform-theme="black-rainbow"] .wave-base {
+  stop-color: #4ade80;
+}
+.audio-waveform[data-waveform-theme="black-rainbow"] .wave-tip {
+  stop-color: #f87171;
 }
 :root[data-theme="light"] .audio-waveform .wave-base {
-  stop-color: #7d6242;
+  stop-color: #2563eb;
 }
 :root[data-theme="light"] .audio-waveform .wave-tip {
-  stop-color: #af9066;
+  stop-color: #0284c7;
 }
 .audio-waveform .wave-bar {
   transform-box: fill-box;

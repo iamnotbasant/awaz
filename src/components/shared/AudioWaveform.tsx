@@ -38,6 +38,7 @@ export interface AudioWaveformProps {
    * the window fades out. Thawing starts from rest. */
   freeze?: boolean;
   className?: string;
+  waveformTheme?: string;
 }
 
 const restingSprings = (count: number): Spring[] =>
@@ -54,6 +55,7 @@ const AudioWaveform: React.FC<AudioWaveformProps> = ({
   progress,
   freeze = false,
   className = "",
+  waveformTheme,
 }) => {
   const count = Math.max(
     1,
@@ -228,6 +230,7 @@ const AudioWaveform: React.FC<AudioWaveformProps> = ({
     <svg
       ref={svgRef}
       className={`audio-waveform ${size} ${mode} ${showsProgress ? "progress" : ""} ${active ? "" : "is-idle"} ${className}`}
+      data-waveform-theme={waveformTheme}
       viewBox={`0 0 ${width} 24`}
       aria-hidden="true"
       focusable="false"

@@ -1994,6 +1994,42 @@ pub fn change_waveform_style_setting(app: AppHandle, style: String) -> Result<()
 
 #[tauri::command]
 #[specta::specta]
+pub fn change_overlay_waveform_theme_setting(app: AppHandle, theme: String) -> Result<(), String> {
+    let mut s = settings::get_settings(&app);
+    s.overlay_waveform_theme = theme;
+    settings::write_settings(&app, s);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn change_overlay_width_setting(app: AppHandle, width: String) -> Result<(), String> {
+    let mut s = settings::get_settings(&app);
+    s.overlay_width = width;
+    settings::write_settings(&app, s);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn change_overlay_show_duration_setting(app: AppHandle, show: bool) -> Result<(), String> {
+    let mut s = settings::get_settings(&app);
+    s.overlay_show_duration = show;
+    settings::write_settings(&app, s);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn change_overlay_streaming_display_setting(app: AppHandle, show: bool) -> Result<(), String> {
+    let mut s = settings::get_settings(&app);
+    s.overlay_streaming_display = show;
+    settings::write_settings(&app, s);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
 pub fn change_post_process_min_duration_secs_setting(
     app: AppHandle,
     seconds: u32,

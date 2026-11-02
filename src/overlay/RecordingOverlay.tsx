@@ -328,6 +328,11 @@ const RecordingOverlay: React.FC = () => {
   const showEpoch = useRef<number | null>(null);
   /** An Undo / Try again was clicked and has not been answered yet. */
   const [recovering, setRecovering] = useState(false);
+  const [overlayTheme, setOverlayTheme] = useState<string>("black-rainbow");
+  const [overlayWidth, setOverlayWidth] = useState<string>("medium");
+  const [showDuration, setShowDuration] = useState<boolean>(true);
+  const [streamingDisplay, setStreamingDisplay] = useState<boolean>(true);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const cardBodyRef = useRef<HTMLDivElement>(null);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hopTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -634,7 +639,14 @@ const RecordingOverlay: React.FC = () => {
       listen<StreamTextPayload>("stream-text", ({ payload }) => {
         if (visible && !finished) queueText(payload);
       }).then(register),
+      listen<any>("settings-changed", ({ payload }) => {
+        if (payload?.overlay_waveform_theme) setOverlayTheme(payload.overlay_waveform_theme);
+        if (payload?.overlay_width) setOverlayWidth(payload.overlay_width);
+        if (payload?.overlay_show_duration !== undefined) setShowDuration(Boolean(payload.overlay_show_duration));
+        if (payload?.overlay_streaming_display !== undefined) setStreamingDisplay(Boolean(payload.overlay_streaming_display));
+      }).then(register),
     ]).catch((error) => console.error("Overlay listeners failed:", error));
+
     return () => {
       cancelled = true;
       pendingText.current = null;
@@ -642,6 +654,18 @@ const RecordingOverlay: React.FC = () => {
       for (const unlisten of unlisteners) unlisten();
     };
   }, []);
+
+  useEffect(() => {
+    if (state !== "recording") {
+      setElapsedSeconds(0);
+      return;
+    }
+    const start = performance.now();
+    const interval = setInterval(() => {
+      setElapsedSeconds((performance.now() - start) / 1000);
+    }, 100);
+    return () => clearInterval(interval);
+  }, [state]);
 
   // The model manager reports every download ~10x a second, and Tauri wakes
   // every webview that listens. Only the one model a visible `downloading`
@@ -896,6 +920,7 @@ const RecordingOverlay: React.FC = () => {
         <LiveWaveform
           store={levels}
           live={live}
+          waveformTheme={overlayTheme}
           barCount={shape.bars}
           pitch={shape.pitch}
           barWidth={shape.barWidth}
@@ -1070,7 +1095,35 @@ const RecordingOverlay: React.FC = () => {
             </div>
           ) : (
             <div className="pill-wave" role="status" aria-label={pillLabel}>
-              {indicator(PILL_WAVE)}
+              {indicator({
+                bars:
+                  overlayWidth === "long"
+                    ? 24
+                    : overlayWidth === "short"
+                      ? 12
+                      : 18,
+              })}
+              {showDuration && isRecording && (
+                <span
+                  className="overlay-timer"
+                  style={{
+                    color:
+                      overlayTheme === "black-white"
+                        ? "#e5e7eb"
+                        : overlayTheme === "black-rainbow"
+                          ? "#fef08a"
+                          : "#bae6fd",
+                    marginLeft: "6px",
+                    fontFamily:
+                      "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                    fontSize: "11px",
+                    fontWeight: 600,
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                >
+                  {elapsedSeconds.toFixed(1)}s
+                </span>
+              )}
             </div>
           )}
         </div>

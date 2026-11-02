@@ -645,6 +645,38 @@ async changeAssistantOverlayStyleSetting(style: string) : Promise<Result<null, s
     else return { status: "error", error: e  as any };
 }
 },
+async changeOverlayWaveformThemeSetting(theme: string) : Promise<Result<null, string>> {
+    try {
+        return { status: "ok", data: await TAURI_INVOKE("change_overlay_waveform_theme_setting", { theme }) };
+    } catch (e) {
+        if(e instanceof Error) throw e;
+        else return { status: "error", error: e as any };
+    }
+},
+async changeOverlayWidthSetting(width: string) : Promise<Result<null, string>> {
+    try {
+        return { status: "ok", data: await TAURI_INVOKE("change_overlay_width_setting", { width }) };
+    } catch (e) {
+        if(e instanceof Error) throw e;
+        else return { status: "error", error: e as any };
+    }
+},
+async changeOverlayShowDurationSetting(show: boolean) : Promise<Result<null, string>> {
+    try {
+        return { status: "ok", data: await TAURI_INVOKE("change_overlay_show_duration_setting", { show }) };
+    } catch (e) {
+        if(e instanceof Error) throw e;
+        else return { status: "error", error: e as any };
+    }
+},
+async changeOverlayStreamingDisplaySetting(show: boolean) : Promise<Result<null, string>> {
+    try {
+        return { status: "ok", data: await TAURI_INVOKE("change_overlay_streaming_display_setting", { show }) };
+    } catch (e) {
+        if(e instanceof Error) throw e;
+        else return { status: "error", error: e as any };
+    }
+},
 /**
  * Set how long the finished live-transcription card stays on screen. Read at
  * the moment a dictation completes, so the next one uses it with no restart.
@@ -3835,7 +3867,7 @@ assistant_overlay_style?: OverlayStyle;
 /**
  * How long the finished live-transcription card stays up before leaving.
  */
-overlay_linger?: OverlayLinger; debug_mode?: boolean; log_level?: LogLevel; custom_words?: string[]; app_prompt_rules?: Partial<{ [key in string]: string }>; app_rules?: AppPromptRule[]; hotword_categories?: Partial<{ [key in string]: string[] }>; waveform_style?: string; 
+overlay_linger?: OverlayLinger; debug_mode?: boolean; log_level?: LogLevel; custom_words?: string[]; app_prompt_rules?: Partial<{ [key in string]: string }>; app_rules?: AppPromptRule[]; hotword_categories?: Partial<{ [key in string]: string[] }>; waveform_style?: string; overlay_waveform_theme?: string; overlay_width?: string; overlay_show_duration?: boolean; overlay_streaming_display?: boolean; 
 /**
  * Offer to record when a call appears to be in progress.
  * 

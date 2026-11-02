@@ -198,6 +198,14 @@ const settingUpdaters: {
   overlay_style: (value) => commands.changeOverlayStyleSetting(value as string),
   assistant_overlay_style: (value) =>
     commands.changeAssistantOverlayStyleSetting(value as string),
+  overlay_waveform_theme: (value) =>
+    commands.changeOverlayWaveformThemeSetting(value as string),
+  overlay_width: (value) =>
+    commands.changeOverlayWidthSetting(value as string),
+  overlay_show_duration: (value) =>
+    commands.changeOverlayShowDurationSetting(value as boolean),
+  overlay_streaming_display: (value) =>
+    commands.changeOverlayStreamingDisplaySetting(value as boolean),
   overlay_linger: (value) =>
     commands.changeOverlayLingerSetting(value as OverlayLinger),
   debug_mode: (value) => commands.changeDebugModeSetting(value as boolean),
