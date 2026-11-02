@@ -3100,6 +3100,7 @@ fn flow_outcome(transcription: String, generated: Option<String>, dismissed: boo
         post_process_prompt: Some(crate::flow::FLOW_HISTORY_MARKER.to_string()),
         post_process_requested: false,
         dismissed,
+        ..EntryOutcome::default()
     }
 }
 

@@ -164,6 +164,7 @@ async fn rerun_entry(
                 post_process_prompt,
                 post_process_requested: entry.post_process_requested,
                 dismissed: false,
+                ..EntryOutcome::default()
             },
         )
         .map(|_| ())
