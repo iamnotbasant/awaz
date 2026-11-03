@@ -664,7 +664,8 @@
         "descriptionUnsupported": "This model detects the language automatically.",
         "searchPlaceholder": "Search languages…",
         "noResults": "No languages found",
-        "auto": "Auto"
+        "auto": "Auto",
+        "hinglish": "Hinglish (Roman)"
       },
       "pushToTalk": {
         "label": "Recording behavior",

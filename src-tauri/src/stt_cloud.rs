@@ -231,7 +231,15 @@ pub(crate) fn resolve_cloud_stt(
     // causes Whisper to misdetect into Icelandic/Welsh/etc. gibberish.
     let is_whisper = is_whisper_stt(&provider.id, provider.kind, &model);
     let language = if is_whisper {
-        Some("hi".to_string())
+        if settings.selected_language == "hinglish"
+            || settings.selected_language == "hi"
+            || settings.selected_language == "auto"
+            || settings.selected_language.is_empty()
+        {
+            Some("hi".to_string())
+        } else {
+            cloud_language_code(&settings.selected_language)
+        }
     } else {
         cloud_language_code(&settings.selected_language)
     };
@@ -303,6 +311,9 @@ fn cloud_language_code(selected: &str) -> Option<String> {
     let trimmed = selected.trim();
     if trimmed.is_empty() || trimmed == "auto" {
         return None;
+    }
+    if trimmed == "hinglish" {
+        return Some("hi".to_string());
     }
     let primary = trimmed.split(['-', '_']).next().unwrap_or(trimmed);
     if primary.is_empty() {

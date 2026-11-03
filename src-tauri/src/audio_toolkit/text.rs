@@ -538,6 +538,152 @@ pub fn is_hindi_or_english_content(text: &str) -> bool {
     true
 }
 
+/// Fallback transliterator converting any remaining Devanagari script into Latin/Roman Hinglish.
+/// Guarantees that when Hinglish (Roman) or Hindi language is selected, final pasted text
+/// is strictly Roman script and never contains Devanagari characters (followup-004 Q4b).
+pub fn devanagari_to_roman(text: &str) -> String {
+    if !text.chars().any(|c| ('\u{0900}'..='\u{097F}').contains(&c) || ('\u{A8E0}'..='\u{A8FF}').contains(&c)) {
+        return text.to_string();
+    }
+
+    let mut result = String::with_capacity(text.len() * 2);
+    let chars: Vec<char> = text.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+
+    while i < len {
+        let c = chars[i];
+        let next_c = if i + 1 < len { Some(chars[i + 1]) } else { None };
+
+        // Punctuation
+        if c == '।' {
+            result.push('.');
+            i += 1;
+            continue;
+        }
+
+        // Independent vowels
+        let vowel = match c {
+            'अ' => Some("a"),
+            'आ' => Some("aa"),
+            'इ' => Some("i"),
+            'ई' => Some("ee"),
+            'उ' => Some("u"),
+            'ऊ' => Some("oo"),
+            'ऋ' => Some("ri"),
+            'ए' => Some("e"),
+            'ऐ' => Some("ai"),
+            'ओ' => Some("o"),
+            'औ' => Some("au"),
+            'अं' | 'ं' | 'ँ' => Some("n"),
+            'ः' => Some("h"),
+            _ => None,
+        };
+
+        if let Some(v) = vowel {
+            result.push_str(v);
+            i += 1;
+            continue;
+        }
+
+        // Matras (dependent vowel signs)
+        let matra = match c {
+            'ा' => Some("aa"),
+            'ि' => Some("i"),
+            'ी' => Some("ee"),
+            'ु' => Some("u"),
+            'ू' => Some("oo"),
+            'ृ' => Some("ri"),
+            'े' => Some("e"),
+            'ै' => Some("ai"),
+            'ो' => Some("o"),
+            'ौ' => Some("au"),
+            '्' => Some(""),
+            _ => None,
+        };
+
+        if let Some(m) = matra {
+            result.push_str(m);
+            i += 1;
+            continue;
+        }
+
+        // Consonants
+        let consonant = match c {
+            'क' => Some("k"),
+            'ख' => Some("kh"),
+            'ग' => Some("g"),
+            'घ' => Some("gh"),
+            'ङ' => Some("ng"),
+            'च' => Some("ch"),
+            'छ' => Some("chh"),
+            'ज' => Some("j"),
+            'झ' => Some("jh"),
+            'ञ' => Some("ny"),
+            'ट' => Some("t"),
+            'ठ' => Some("th"),
+            'ड' => Some("d"),
+            'ढ' => Some("dh"),
+            'ण' => Some("n"),
+            'त' => Some("t"),
+            'थ' => Some("th"),
+            'द' => Some("d"),
+            'ध' => Some("dh"),
+            'न' => Some("n"),
+            'प' => Some("p"),
+            'फ' => Some("f"),
+            'ब' => Some("b"),
+            'भ' => Some("bh"),
+            'म' => Some("m"),
+            'य' => Some("y"),
+            'र' => Some("r"),
+            'ल' => Some("l"),
+            'व' => Some("v"),
+            'श' => Some("sh"),
+            'ष' => Some("sh"),
+            'स' => Some("s"),
+            'ह' => Some("h"),
+            'ड़' => Some("d"),
+            'ढ़' => Some("dh"),
+            'ज़' => Some("z"),
+            'फ़' => Some("f"),
+            'क़' => Some("q"),
+            'ख़' => Some("kh"),
+            'ग़' => Some("gh"),
+            _ => None,
+        };
+
+        if let Some(cons) = consonant {
+            result.push_str(cons);
+            let has_following_matra_or_virama = match next_c {
+                Some('ा' | 'ि' | 'ी' | 'ु' | 'ू' | 'ृ' | 'े' | 'ै' | 'ो' | 'ौ' | '्') => true,
+                _ => false,
+            };
+            if !has_following_matra_or_virama {
+                let is_end_of_word = match next_c {
+                    None => true,
+                    Some(ch) if ch.is_whitespace() || ch.is_ascii_punctuation() || ch == '।' => true,
+                    _ => false,
+                };
+                if !is_end_of_word {
+                    result.push('a');
+                }
+            }
+            if next_c == Some('्') {
+                i += 1;
+            }
+            i += 1;
+            continue;
+        }
+
+        // Pass-through other characters
+        result.push(c);
+        i += 1;
+    }
+
+    result
+}
+
 static MULTI_SPACE_PATTERN: Lazy<Regex> = Lazy::new(|| Regex::new(r"\s{2,}").unwrap());
 
 /// Two commas left adjacent by a deletion between them ("just, uh, fixing").
@@ -1312,5 +1458,22 @@ mod tests {
         assert!(is_hindi_or_english_content("OK"));
         assert!(is_hindi_or_english_content("Haan"));
         assert!(is_hindi_or_english_content("Yes"));
+    }
+
+    #[test]
+    fn test_devanagari_to_roman_transliteration() {
+        // Pure Devanagari Hindi text
+        let roman = devanagari_to_roman("नमस्ते भाई क्या हाल है");
+        assert_eq!(roman, "namaste bhaai kya haal hai");
+        assert!(!roman.chars().any(|c| ('\u{0900}'..='\u{097F}').contains(&c)));
+
+        // Mixed Devanagari and English loanwords with danda
+        let mixed = devanagari_to_roman("आज का meeting 5 बजे है।");
+        assert_eq!(mixed, "aaj kaa meeting 5 baje hai.");
+        assert!(!mixed.chars().any(|c| ('\u{0900}'..='\u{097F}').contains(&c)));
+
+        // Pure Latin text remains untouched
+        assert_eq!(devanagari_to_roman("Namaste bhai"), "Namaste bhai");
+        assert_eq!(devanagari_to_roman("Hello world!"), "Hello world!");
     }
 }

@@ -94,7 +94,10 @@ fn uses_ai_cleanup(post_process: bool) -> bool {
 /// cleanup shortcut, and for the dictation shortcut too once cleanup has been
 /// moved onto it.
 fn cleans_up(cleanup_binding: bool, settings: &AppSettings) -> bool {
-    cleanup_binding || crate::settings::cleanup_on_dictation(settings)
+    cleanup_binding
+        || crate::settings::cleanup_on_dictation(settings)
+        || settings.selected_language == "hinglish"
+        || settings.selected_language == "hi"
 }
 
 /// Builds the hotwords injection prompt segment. Returns None if hotwords is empty.
@@ -3522,7 +3525,13 @@ async fn deliver_transcription(d: Dictation, transcription: String) {
                 String::new(),
             )
         } else {
-            (cleanup_status, cleanup_error, processed.final_text)
+            let settings = crate::settings::get_settings(&ah);
+            let text = if settings.selected_language == "hinglish" || settings.selected_language == "hi" {
+                crate::audio_toolkit::devanagari_to_roman(&processed.final_text)
+            } else {
+                processed.final_text
+            };
+            (cleanup_status, cleanup_error, text)
         };
 
     let row = d.history.write(
@@ -5603,6 +5612,21 @@ Try plugging it into a coding agent or productivity app listed on https://openro
     fn plain_dictation_and_cleanup_keep_distinct_generation_paths() {
         assert!(!uses_ai_cleanup(false));
         assert!(uses_ai_cleanup(true));
+    }
+
+    #[test]
+    fn cleans_up_is_forced_when_language_is_hinglish_or_hindi() {
+        let mut settings = crate::settings::get_default_settings();
+        settings.post_process_enabled = false;
+        settings.post_process_on_dictation = false;
+        settings.selected_language = "hinglish".to_string();
+        assert!(cleans_up(false, &settings));
+
+        settings.selected_language = "hi".to_string();
+        assert!(cleans_up(false, &settings));
+
+        settings.selected_language = "auto".to_string();
+        assert!(!cleans_up(false, &settings));
     }
 
     #[test]
