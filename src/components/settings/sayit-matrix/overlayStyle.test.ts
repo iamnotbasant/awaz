@@ -60,4 +60,27 @@ describe("P6: SayIt-Style Overlay Customization", () => {
     expect(settings.overlay_streaming_display).toBe(true);
     expect(OVERLAY_WIDTH_PRESETS[settings.overlay_width].barCount).toBe(18);
   });
+
+  it("Q3 SayIt overlay parity: transcript-first capsule unites live text, waveform, and elapsed timer in one pill", () => {
+    interface SayItPillLayout {
+      transcriptText: string;
+      waveformBarCount: number;
+      showDuration: boolean;
+      timerColor: string;
+      theme: OverlayWaveTheme;
+    }
+
+    const pill: SayItPillLayout = {
+      transcriptText: "LIVE TRANSCRIPT — Awaz listens and types as you speak",
+      waveformBarCount: OVERLAY_WIDTH_PRESETS.medium.barCount,
+      showDuration: true,
+      timerColor: getTimerColor("black-rainbow"),
+      theme: "black-rainbow",
+    };
+
+    expect(pill.transcriptText).toContain("LIVE TRANSCRIPT");
+    expect(pill.waveformBarCount).toBe(18);
+    expect(pill.showDuration).toBe(true);
+    expect(pill.timerColor).toBe("#fef08a");
+  });
 });

@@ -149,40 +149,28 @@ export const OverlayPreview: React.FC<{
 
   return (
     <div className="flex flex-col items-center gap-2.5 py-3">
-      {/* Streaming live captions bubble */}
-      {streaming && (
-        <div className="relative w-[280px] rounded-2xl border border-zinc-700 bg-black px-3.5 py-2.5 shadow-[0_6px_16px_rgba(0,0,0,0.6)]">
-          <span className="mb-1 block text-[10px] font-semibold tracking-wider text-zinc-400">
-            LIVE TRANSCRIPT
-          </span>
-          <div className="flex max-h-[44px] flex-col justify-end overflow-hidden text-left text-[13px] leading-5 text-white">
-            <div>
-              {typed}
+      {/* SayIt Pure-Black Overlay Capsule (Transcript-first + Waveform + Timer) */}
+      <div className="flex items-center rounded-full border border-zinc-700 bg-black px-4 py-2.5 shadow-[0_8px_24px_rgba(0,0,0,0.7)] gap-2.5 max-w-[90%]">
+        {/* Live transcript text */}
+        <div className="flex items-center min-w-[120px] max-w-[220px] overflow-hidden text-xs font-medium text-white truncate">
+          {streaming ? (
+            <span>
+              {typed || "Listening..."}
               <span
-                className="ml-0.5 inline-block h-[1.05em] w-[2px] rounded-full align-middle bg-white"
-                style={{ animation: "pulse 1.1s ease-in-out infinite" }}
+                className="ml-0.5 inline-block h-[1em] w-[2px] rounded-full align-middle bg-white animate-pulse"
               />
-            </div>
-          </div>
-          {/* Down-pointing caret */}
-          <span
-            className="absolute left-1/2 -translate-x-1/2"
-            style={{
-              bottom: "-6px",
-              width: 0,
-              height: 0,
-              borderLeft: "6px solid transparent",
-              borderRight: "6px solid transparent",
-              borderTop: "6px solid #000000",
-            }}
-          />
+            </span>
+          ) : (
+            <span className="text-zinc-400">Listening...</span>
+          )}
         </div>
-      )}
 
-      {/* SayIt Pure-Black Overlay Capsule */}
-      <div className="flex items-center rounded-full border border-zinc-700 bg-black px-4 py-2 shadow-[0_6px_16px_rgba(0,0,0,0.6)]">
+        {/* Subtle divider */}
+        <span className="h-3.5 w-px bg-zinc-700/80 shrink-0" aria-hidden="true" />
+
+        {/* Waveform bars */}
         <div
-          className="flex items-center gap-[2.5px]"
+          className="flex items-center gap-[2.5px] shrink-0"
           style={{ height: "20px" }}
         >
           {Array.from({ length: barCount }, (_, index) => {
@@ -204,9 +192,11 @@ export const OverlayPreview: React.FC<{
             );
           })}
         </div>
+
+        {/* Elapsed duration timer */}
         {showDuration && (
           <span
-            className="ml-2 min-w-[28px] text-right font-mono tabular-nums text-xs font-semibold"
+            className="ml-1 min-w-[28px] text-right font-mono tabular-nums text-xs font-semibold shrink-0"
             style={{ color: getTimerColor(theme) }}
           >
             3.2s
@@ -214,7 +204,7 @@ export const OverlayPreview: React.FC<{
         )}
       </div>
 
-      <span className="text-[11px] text-muted">Overlay Preview</span>
+      <span className="text-[11px] text-muted">SayIt Overlay Preview</span>
     </div>
   );
 };

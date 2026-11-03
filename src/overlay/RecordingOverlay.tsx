@@ -1065,9 +1065,7 @@ const RecordingOverlay: React.FC = () => {
         </div>
       ) : (
         <div
-          className={`overlay-pill ${state}${labeled ? " labeled" : ""}${
-            !labeled && hasLiveText && !working ? " has-text" : ""
-          }`}
+          className={`overlay-pill sayit-pill ${state}${labeled ? " labeled" : ""}`}
           role="group"
           aria-label={ariaLabel}
         >
@@ -1092,24 +1090,41 @@ const RecordingOverlay: React.FC = () => {
                 {pillLabel}
               </span>
             </>
-          ) : hasLiveText && !working ? (
-            <div className="stream-text-box" role="status">
-              {transcriptLine}
-            </div>
           ) : (
-            <div className="pill-wave" role="status" aria-label={pillLabel}>
-              {indicator({
-                bars:
-                  overlayWidth === "long"
-                    ? 24
-                    : overlayWidth === "short"
-                      ? 12
-                      : 18,
-              })}
-              {/* eslint-disable i18next/no-literal-string */}
+            <div className="sayit-overlay-content" role="status" aria-label={ariaLabel}>
+              {/* 1. Live Transcript text or status indicator */}
+              <div className="sayit-transcript-box">
+                {hasLiveText ? (
+                  transcriptLine
+                ) : isRecording ? (
+                  <span className="sayit-listening-hint">
+                    <span className="sayit-pulse-dot" />
+                    {t("overlay.listening", { defaultValue: "Listening..." })}
+                  </span>
+                ) : (
+                  <span className="sayit-status-label">{pillLabel}</span>
+                )}
+              </div>
+
+              {/* Subtle divider */}
+              <span className="sayit-divider" aria-hidden="true" />
+
+              {/* 2. Waveform bars */}
+              <div className="sayit-wave">
+                {indicator({
+                  bars:
+                    overlayWidth === "long"
+                      ? 24
+                      : overlayWidth === "short"
+                        ? 12
+                        : 18,
+                })}
+              </div>
+
+              {/* 3. Elapsed duration timer */}
               {showDuration && isRecording && (
                 <span
-                  className="overlay-timer"
+                  className="sayit-timer"
                   style={{
                     color:
                       overlayTheme === "black-white"
@@ -1117,18 +1132,11 @@ const RecordingOverlay: React.FC = () => {
                         : overlayTheme === "black-rainbow"
                           ? "#fef08a"
                           : "#bae6fd",
-                    marginLeft: "6px",
-                    fontFamily:
-                      "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-                    fontSize: "11px",
-                    fontWeight: 600,
-                    fontVariantNumeric: "tabular-nums",
                   }}
                 >
                   {elapsedSeconds.toFixed(1)}s
                 </span>
               )}
-              {/* eslint-enable i18next/no-literal-string */}
             </div>
           )}
         </div>

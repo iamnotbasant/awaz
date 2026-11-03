@@ -17,9 +17,12 @@ type TranslationTable = Record<string, unknown>;
 // when that language is actually selected. All 20 used to be eager, which
 // parsed ~1.8 MB of JSON into every window (settings, the assistant panel, the
 // overlay, the reminder popup, the meeting pill) to show one language.
-const localeLoaders = import.meta.glob<{ default: TranslationTable }>(
-  "./locales/*/translation.json",
-);
+const localeLoaders =
+  typeof (import.meta as any).glob === "function"
+    ? (import.meta as any).glob<{ default: TranslationTable }>(
+        "./locales/*/translation.json",
+      )
+    : {};
 const loaders: Record<string, () => Promise<{ default: TranslationTable }>> =
   {};
 for (const [path, load] of Object.entries(localeLoaders)) {
