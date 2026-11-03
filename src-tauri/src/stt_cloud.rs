@@ -2043,8 +2043,45 @@ mod tests {
     }
 
     #[test]
+    fn groq_stt_resolution_as_default() {
+        let mut settings = get_default_settings();
+        assert_eq!(settings.cloud_stt_provider_id, "groq");
+        settings.stt_engine_mode = SttEngineMode::Cloud;
+        // Without key: MissingApiKey for groq
+        let err = match resolve_cloud_stt(&settings) {
+            Err(e) => e,
+            Ok(_) => panic!("expected missing key error for groq"),
+        };
+        assert_eq!(err.reason, CloudSttUnavailableReason::MissingApiKey);
+        assert_eq!(err.provider_id.as_deref(), Some("groq"));
+
+        // With key: resolves groq
+        settings
+            .cloud_stt_api_keys
+            .insert("groq".to_string(), "test-groq-key".to_string());
+        let cfg = resolve_cloud_stt(&settings).expect("groq should resolve");
+        assert_eq!(cfg.provider.kind, CloudSttKind::OpenAiCompatible);
+        assert_eq!(cfg.api_key, "test-groq-key");
+    }
+
+    #[test]
     fn gemini_stt_resolution_and_missing_key_behavior() {
         let mut settings = get_default_settings();
+        settings.cloud_stt_providers.push(CloudSttProvider {
+            id: "gemini".to_string(),
+            label: "Gemini".to_string(),
+            base_url: "https://generativelanguage.googleapis.com/v1beta".to_string(),
+            allow_base_url_edit: false,
+            kind: CloudSttKind::Gemini,
+            default_model: "gemini-3.5-transcribe".to_string(),
+            models: vec!["gemini-3.5-transcribe".to_string()],
+            models_endpoint: None,
+            honors_keyterms: false,
+            supports_streaming: false,
+            supports_translation: false,
+            key_optional: false,
+            api_key_url: "https://aistudio.google.com/apikey".to_string(),
+        });
         settings.stt_engine_mode = SttEngineMode::Cloud;
         settings.cloud_stt_provider_id = "gemini".to_string();
         // Without key: MissingApiKey error, safe and no crash
@@ -2073,6 +2110,21 @@ mod tests {
     #[test]
     fn gemini_stt_request_format_and_hi_latn_lock() {
         let mut settings = get_default_settings();
+        settings.cloud_stt_providers.push(CloudSttProvider {
+            id: "gemini".to_string(),
+            label: "Gemini".to_string(),
+            base_url: "https://generativelanguage.googleapis.com/v1beta".to_string(),
+            allow_base_url_edit: false,
+            kind: CloudSttKind::Gemini,
+            default_model: "gemini-3.5-transcribe".to_string(),
+            models: vec!["gemini-3.5-transcribe".to_string()],
+            models_endpoint: None,
+            honors_keyterms: false,
+            supports_streaming: false,
+            supports_translation: false,
+            key_optional: false,
+            api_key_url: "https://aistudio.google.com/apikey".to_string(),
+        });
         settings.stt_engine_mode = SttEngineMode::Cloud;
         settings.cloud_stt_provider_id = "gemini".to_string();
         settings

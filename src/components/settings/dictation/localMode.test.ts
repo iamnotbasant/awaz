@@ -32,7 +32,7 @@ describe("Slice 5: Local CPU Inference Engine", () => {
           supported: false,
           model: "parakeet-unified-en-0.6b",
           notice:
-            "Multilingual Hinglish Romanization requires Cloud API Mode (Gemini / Groq).",
+            "Multilingual Hinglish Romanization requires Cloud API Mode (Groq Whisper).",
         };
       };
 
@@ -81,7 +81,7 @@ describe("Slice 5: Local CPU Inference Engine", () => {
       const mockState = {
         localModelLoaded: false,
         cloudConfigured: true,
-        cloudProvider: "gemini",
+        cloudProvider: "groq",
       };
 
       const resolveTranscriptionRoute = (state: typeof mockState) => {
@@ -97,7 +97,7 @@ describe("Slice 5: Local CPU Inference Engine", () => {
 
       const outcome = resolveTranscriptionRoute(mockState);
       expect(outcome.route).toBe("cloud_fallback");
-      expect(outcome.provider).toBe("gemini");
+      expect(outcome.provider).toBe("groq");
     });
   });
 });

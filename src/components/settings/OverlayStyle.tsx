@@ -156,9 +156,7 @@ export const OverlayPreview: React.FC<{
           {streaming ? (
             <span>
               {typed || "Listening..."}
-              <span
-                className="ml-0.5 inline-block h-[1em] w-[2px] rounded-full align-middle bg-white animate-pulse"
-              />
+              <span className="ml-0.5 inline-block h-[1em] w-[2px] rounded-full align-middle bg-white animate-pulse" />
             </span>
           ) : (
             <span className="text-zinc-400">Listening...</span>
@@ -166,7 +164,10 @@ export const OverlayPreview: React.FC<{
         </div>
 
         {/* Subtle divider */}
-        <span className="h-3.5 w-px bg-zinc-700/80 shrink-0" aria-hidden="true" />
+        <span
+          className="h-3.5 w-px bg-zinc-700/80 shrink-0"
+          aria-hidden="true"
+        />
 
         {/* Waveform bars */}
         <div

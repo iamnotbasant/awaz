@@ -1091,7 +1091,11 @@ const RecordingOverlay: React.FC = () => {
               </span>
             </>
           ) : (
-            <div className="sayit-overlay-content" role="status" aria-label={ariaLabel}>
+            <div
+              className="sayit-overlay-content"
+              role="status"
+              aria-label={ariaLabel}
+            >
               {/* 1. Live Transcript text or status indicator */}
               <div className="sayit-transcript-box">
                 {hasLiveText ? (

@@ -59,7 +59,9 @@ describe("Awaz 0.0.3 Item 2 & 3: SayIt Voice Engine & AI Providers Pages", () =>
     // Filter rule: key exists OR isActive OR userAdded; AND provider !== "gemini"
     const visibleCards = allProviders.filter((p) => {
       if (p.id === "gemini") return false;
-      return keyStatus[p.id] || p.id === activeProviderId || userAdded.includes(p.id);
+      return (
+        keyStatus[p.id] || p.id === activeProviderId || userAdded.includes(p.id)
+      );
     });
 
     // ONLY Groq should be visible; all unconfigured providers (ElevenLabs, OpenAI, Deepgram, Azure, Mistral, Gemini) are absent
@@ -94,7 +96,11 @@ describe("Awaz 0.0.3 Item 2 & 3: SayIt Voice Engine & AI Providers Pages", () =>
 
     const visibleAiCards = allAiProviders.filter((p) => {
       if (p.id === "gemini") return false;
-      return !!aiKeys[p.id] || p.id === activeAiProvider || userAddedAi.includes(p.id);
+      return (
+        !!aiKeys[p.id] ||
+        p.id === activeAiProvider ||
+        userAddedAi.includes(p.id)
+      );
     });
 
     expect(visibleAiCards).toHaveLength(1);

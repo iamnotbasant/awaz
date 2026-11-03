@@ -210,38 +210,8 @@ pub async fn test_cloud_stt(app: AppHandle) -> Result<String, String> {
 /// path — key, upload, transcription — on their own machine.
 #[tauri::command]
 #[specta::specta]
-pub async fn test_gemini_transcription(app: AppHandle) -> Result<String, String> {
-    let mut settings = get_settings(&app);
-    // Always test Gemini, regardless of which provider is selected.
-    settings.cloud_stt_provider_id = "gemini".to_string();
-    let cfg = crate::stt_cloud::resolve_cloud_stt(&settings).map_err(describe_unavailable)?;
-
-    let sample_path = app
-        .path()
-        .resolve(
-            "resources/hinglish-sample.mp3",
-            tauri::path::BaseDirectory::Resource,
-        )
-        .map_err(|e| format!("Could not locate the bundled test audio: {e}"))?;
-    let bytes = std::fs::read(&sample_path)
-        .map_err(|e| format!("Could not read the bundled test audio: {e}"))?;
-    if bytes.is_empty() {
-        return Err("The bundled test audio is empty.".to_string());
-    }
-
-    let audio = crate::stt_cloud::AudioUpload {
-        bytes,
-        format: crate::stt_cloud::UploadFormat::Mp3,
-    };
-    let text = tauri::async_runtime::spawn_blocking(move || {
-        crate::stt_cloud::transcribe_gemini_sample_blocking(&cfg, audio)
-    })
-    .await
-    .map_err(|e| format!("Transcription test task failed: {e}"))??;
-    if text.trim().is_empty() {
-        return Err("Gemini returned an empty transcript for the test audio.".to_string());
-    }
-    Ok(text)
+pub async fn test_gemini_transcription(_app: AppHandle) -> Result<String, String> {
+    Err("Gemini has been removed. Awaz uses Groq Whisper for speech transcription.".to_string())
 }
 
 /// Turn a resolution failure into something worth showing in the UI. The typed

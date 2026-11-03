@@ -77,7 +77,9 @@ export const AiProvidersPage: React.FC = () => {
     DEFAULT_POST_PROCESS_PROVIDERS,
   );
   const [userAddedProviders, setUserAddedProviders] = useState<string[]>([]);
-  const [testStatuses, setTestStatuses] = useState<Record<string, ProviderTestStatus>>({});
+  const [testStatuses, setTestStatuses] = useState<
+    Record<string, ProviderTestStatus>
+  >({});
   const [isTestingAll, setIsTestingAll] = useState(false);
 
   // Per-card drafts
@@ -146,7 +148,11 @@ export const AiProvidersPage: React.FC = () => {
     setSavingKey((prev) => ({ ...prev, [providerId]: true }));
     try {
       await commands.changePostProcessApiKeySetting(providerId, key);
-      toast.success(t("settings.postProcessing.api.keySaved", { defaultValue: "API key saved" }));
+      toast.success(
+        t("settings.postProcessing.api.keySaved", {
+          defaultValue: "API key saved",
+        }),
+      );
       setKeyDrafts((prev) => ({ ...prev, [providerId]: "" }));
     } catch (err) {
       toast.error(String(err));
@@ -160,7 +166,11 @@ export const AiProvidersPage: React.FC = () => {
     if (!model) return;
     try {
       await commands.changePostProcessModelSetting(providerId, model);
-      toast.success(t("settings.postProcessing.api.modelSaved", { defaultValue: "Model saved" }));
+      toast.success(
+        t("settings.postProcessing.api.modelSaved", {
+          defaultValue: "Model saved",
+        }),
+      );
     } catch (err) {
       toast.error(String(err));
     }
@@ -182,11 +192,19 @@ export const AiProvidersPage: React.FC = () => {
       return;
     }
     try {
-      await commands.changePostProcessApiKeySetting(newProviderKind, newApiKey.trim());
+      await commands.changePostProcessApiKeySetting(
+        newProviderKind,
+        newApiKey.trim(),
+      );
       if (newModel.trim()) {
-        await commands.changePostProcessModelSetting(newProviderKind, newModel.trim());
+        await commands.changePostProcessModelSetting(
+          newProviderKind,
+          newModel.trim(),
+        );
       }
-      setUserAddedProviders((prev) => Array.from(new Set([...prev, newProviderKind])));
+      setUserAddedProviders((prev) =>
+        Array.from(new Set([...prev, newProviderKind])),
+      );
       setIsAddModalOpen(false);
       setNewApiKey("");
       toast.success("AI service added successfully");
@@ -211,7 +229,8 @@ export const AiProvidersPage: React.FC = () => {
                 AI services
               </h3>
               <p className="text-xs text-muted">
-                Configured cleanup providers. Only configured services are shown.
+                Configured cleanup providers. Only configured services are
+                shown.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -235,8 +254,7 @@ export const AiProvidersPage: React.FC = () => {
                 size="sm"
                 onClick={() => setIsAddModalOpen(true)}
               >
-                <Plus className="mr-1 h-3.5 w-3.5" />
-                + New
+                <Plus className="mr-1 h-3.5 w-3.5" />+ New
               </Button>
             </div>
           </div>
@@ -245,13 +263,17 @@ export const AiProvidersPage: React.FC = () => {
             {configuredProviders.map((provider) => {
               const isActive = provider.id === activeProviderId;
               const testStatus = testStatuses[provider.id] || { state: "idle" };
-              const storedKeys = getSetting("post_process_api_keys" as any) || {};
+              const storedKeys =
+                getSetting("post_process_api_keys" as any) || {};
               const hasKey = !!storedKeys[provider.id]?.trim();
-              const storedModels = getSetting("post_process_models" as any) || {};
+              const storedModels =
+                getSetting("post_process_models" as any) || {};
               const modelValue =
                 modelDrafts[provider.id] ??
                 (storedModels[provider.id] ||
-                  (provider.id === "groq" ? "openai/gpt-oss-20b" : "gpt-4o-mini"));
+                  (provider.id === "groq"
+                    ? "openai/gpt-oss-20b"
+                    : "gpt-4o-mini"));
 
               return (
                 <div
@@ -271,13 +293,11 @@ export const AiProvidersPage: React.FC = () => {
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-ink text-sm">
-                            {provider.id === "groq" ? "Groq AI Cleanup" : provider.label}
+                            {provider.id === "groq"
+                              ? "Groq AI Cleanup"
+                              : provider.label}
                           </span>
-                          {isActive && (
-                            <Badge variant="active">
-                              Selected
-                            </Badge>
-                          )}
+                          {isActive && <Badge variant="active">Selected</Badge>}
                           {/* Latency badge or Error badge */}
                           {testStatus.state === "testing" && (
                             <Badge variant="secondary">
@@ -285,15 +305,14 @@ export const AiProvidersPage: React.FC = () => {
                               testing...
                             </Badge>
                           )}
-                          {testStatus.state === "ok" && testStatus.latency !== undefined && (
-                            <Badge variant="success">
-                              {testStatus.latency}ms
-                            </Badge>
-                          )}
+                          {testStatus.state === "ok" &&
+                            testStatus.latency !== undefined && (
+                              <Badge variant="success">
+                                {testStatus.latency}ms
+                              </Badge>
+                            )}
                           {testStatus.state === "error" && (
-                            <Badge variant="error">
-                              Not working
-                            </Badge>
+                            <Badge variant="error">Not working</Badge>
                           )}
                         </div>
                         <span className="text-xs text-muted font-mono">
@@ -434,7 +453,8 @@ export const AiProvidersPage: React.FC = () => {
 
             {configuredProviders.length === 0 && (
               <div className="rounded-xl border border-hairline bg-surface p-6 text-center text-sm text-muted">
-                No configured AI services. Click "+ New" to add Groq AI Cleanup or custom LLM service.
+                No configured AI services. Click "+ New" to add Groq AI Cleanup
+                or custom LLM service.
               </div>
             )}
           </div>
@@ -462,12 +482,15 @@ export const AiProvidersPage: React.FC = () => {
               Add AI Service Provider
             </h3>
             <p className="text-xs text-muted">
-              Choose an AI cleanup service and enter credentials. Gemini is strictly removed.
+              Choose an AI cleanup service and enter credentials. Gemini is
+              strictly removed.
             </p>
 
             <div className="space-y-3">
               <div className="space-y-1">
-                <label className="text-xs font-medium text-ink">Provider Type</label>
+                <label className="text-xs font-medium text-ink">
+                  Provider Type
+                </label>
                 <select
                   value={newProviderKind}
                   onChange={(e) => {
@@ -475,8 +498,10 @@ export const AiProvidersPage: React.FC = () => {
                     setNewProviderKind(val);
                     if (val === "groq") setNewModel("openai/gpt-oss-20b");
                     else if (val === "openai") setNewModel("gpt-4o-mini");
-                    else if (val === "mistral") setNewModel("mistral-small-latest");
-                    else if (val === "anthropic") setNewModel("claude-3-5-haiku-20241022");
+                    else if (val === "mistral")
+                      setNewModel("mistral-small-latest");
+                    else if (val === "anthropic")
+                      setNewModel("claude-3-5-haiku-20241022");
                     else setNewModel("gpt-4o-mini");
                   }}
                   className="w-full rounded-lg border border-hairline bg-surface-muted px-3 py-2 text-xs text-ink focus:outline-hidden focus:ring-1 focus:ring-accent"

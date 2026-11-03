@@ -36,7 +36,7 @@ export const LocalModeSection: React.FC = () => {
               defaultValue: "Switched to Local Offline Mode (Parakeet CPU)",
             })
           : t("settings.engine.switchedCloud", {
-              defaultValue: "Switched to Cloud API Mode (Gemini/Groq)",
+              defaultValue: "Switched to Cloud API Mode (Groq Whisper)",
             }),
       );
     } catch (err) {
@@ -94,7 +94,7 @@ export const LocalModeSection: React.FC = () => {
               <p className="text-xs leading-relaxed">
                 {t("settings.engine.localNoticeDesc", {
                   defaultValue:
-                    "Offline Local Mode uses Parakeet Unified EN 0.6B running directly on CPU (<1.5GB RAM). Full multilingual Hinglish Romanization requires Cloud API Mode (Gemini / Groq).",
+                    "Offline Local Mode uses Parakeet Unified EN 0.6B running directly on CPU (<1.5GB RAM). Full multilingual Hinglish Romanization requires Cloud API Mode (Groq Whisper).",
                 })}
               </p>
             </div>

@@ -24,13 +24,6 @@ export interface ProviderStatus {
 
 const SHIPPED_TEST_PROVIDERS: ProviderStatus[] = [
   {
-    id: "gemini",
-    kind: "stt",
-    label: "Gemini 3.5 Transcribe (Native)",
-    model: "gemini-3.5-transcribe",
-    state: "idle",
-  },
-  {
     id: "groq",
     kind: "stt",
     label: "Groq Whisper (Cloud ASR)",
@@ -42,13 +35,6 @@ const SHIPPED_TEST_PROVIDERS: ProviderStatus[] = [
     kind: "cleanup",
     label: "Groq AI Cleanup",
     model: "openai/gpt-oss-20b",
-    state: "idle",
-  },
-  {
-    id: "gemini",
-    kind: "cleanup",
-    label: "Gemini AI Cleanup",
-    model: "gemini-3-flash-preview",
     state: "idle",
   },
   {

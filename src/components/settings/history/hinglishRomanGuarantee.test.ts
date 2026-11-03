@@ -22,7 +22,8 @@ describe("Awaz 0.0.3 Item 5: Hinglish Roman Option & Output Guarantee (Q4 / Q4b)
     // Simulating stt_cloud::cloud_language_code & whisper language resolver
     const resolveLanguage = (selected: string, isWhisper: boolean) => {
       if (selected === "hinglish") return "hi";
-      if (isWhisper && (selected === "hi" || selected === "auto" || !selected)) return "hi";
+      if (isWhisper && (selected === "hi" || selected === "auto" || !selected))
+        return "hi";
       return selected === "auto" ? null : selected;
     };
 
@@ -87,7 +88,8 @@ describe("Awaz 0.0.3 Item 5: Hinglish Roman Option & Output Guarantee (Q4 / Q4b)
 
   test("Test 1 line verbatim correct Roman output", () => {
     // Ground truth acceptance test 1 line
-    const test1Devanagari = "यह एक टेस्ट है और फाइनल आउटपुट हमेशा रोमन में होना चाहिए";
+    const test1Devanagari =
+      "यह एक टेस्ट है और फाइनल आउटपुट हमेशा रोमन में होना चाहिए";
     expect(DEVANAGARI_REGEX.test(test1Devanagari)).toBe(true);
 
     const test1RomanExpected =

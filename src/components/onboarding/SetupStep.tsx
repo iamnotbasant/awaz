@@ -5,8 +5,8 @@ import { CloudTranscriptionGroup } from "@/components/settings/dictation/CloudTr
 import { OnboardingFrame, StepHeading } from "./OnboardingFrame";
 
 /**
- * One decision: the Gemini API key. Awaz transcribes in the cloud with
- * gemini-3.5-transcribe — there is no speech model to download, so the old
+ * One decision: the Groq API key. Awaz transcribes in the cloud with
+ * Groq Whisper — there is no speech model to download, so the old
  * model-picker step is gone. The provider, key, and model rows are the same
  * `CloudTranscriptionGroup` the Models page uses, so setup and Settings
  * cannot disagree.

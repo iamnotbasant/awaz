@@ -67,14 +67,10 @@ export const CloudTranscriptionGroup: React.FC<{
   const [loadingModels, setLoadingModels] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
-  const [geminiTesting, setGeminiTesting] = useState(false);
-  const [geminiResult, setGeminiResult] = useState<
-    { ok: true; text: string } | { ok: false; error: string } | null
-  >(null);
   const [busy, setBusy] = useState(false);
 
-  // Awaz is cloud-only: there is no on-device engine to switch to.
-  const providerId = getSetting("cloud_stt_provider_id") ?? "gemini";
+  // Awaz is cloud-only: Groq is the default speech engine.
+  const providerId = getSetting("cloud_stt_provider_id") ?? "groq";
   const provider = useMemo(
     () => providers.find((entry) => entry.id === providerId),
     [providers, providerId],
@@ -85,7 +81,8 @@ export const CloudTranscriptionGroup: React.FC<{
       commands.getCloudSttProviders(),
       commands.getCloudSttKeyStatus(),
     ]);
-    setProviders(list);
+    const cleanList = list.filter((p) => p.id !== "gemini");
+    setProviders(cleanList);
     setKeyStatus(Object.fromEntries(keys));
   }, []);
 
@@ -179,23 +176,6 @@ export const CloudTranscriptionGroup: React.FC<{
       toast.error(String(error));
     } finally {
       setTesting(false);
-    }
-  };
-
-  const runGeminiTest = async () => {
-    setGeminiTesting(true);
-    setGeminiResult(null);
-    try {
-      const result = await commands.testGeminiTranscription();
-      if (result.status === "ok") {
-        setGeminiResult({ ok: true, text: result.data });
-      } else {
-        setGeminiResult({ ok: false, error: result.error });
-      }
-    } catch (error) {
-      setGeminiResult({ ok: false, error: String(error) });
-    } finally {
-      setGeminiTesting(false);
     }
   };
 
@@ -452,45 +432,6 @@ export const CloudTranscriptionGroup: React.FC<{
             t("settings.dictation.cloud.test.action")
           )}
         </Button>
-      </SettingContainer>
-
-      <SettingContainer
-        title={t("settings.dictation.cloud.geminiTest.title")}
-        description={t("settings.dictation.cloud.geminiTest.description")}
-        grouped={true}
-        layout="stacked"
-      >
-        <Button
-          size="sm"
-          variant="secondary"
-          onClick={() => void runGeminiTest()}
-          disabled={geminiTesting}
-        >
-          {geminiTesting ? (
-            <span className="inline-flex items-center gap-1.5">
-              <Loader2 size={13} className="animate-spin" />
-              {t("settings.dictation.cloud.geminiTest.running")}
-            </span>
-          ) : (
-            t("settings.dictation.cloud.geminiTest.action")
-          )}
-        </Button>
-        {geminiResult && (
-          <Alert
-            variant={geminiResult.ok ? "success" : "error"}
-            contained
-            className="mt-2 w-full"
-          >
-            <p className="text-xs font-semibold">
-              {geminiResult.ok
-                ? t("settings.dictation.cloud.geminiTest.resultTitle")
-                : t("settings.dictation.cloud.geminiTest.failedTitle")}
-            </p>
-            <p className="mt-1 text-sm whitespace-pre-wrap">
-              {geminiResult.ok ? geminiResult.text : geminiResult.error}
-            </p>
-          </Alert>
-        )}
       </SettingContainer>
     </>
   );

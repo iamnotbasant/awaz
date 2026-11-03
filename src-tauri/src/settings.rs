@@ -2257,16 +2257,6 @@ fn default_post_process_providers() -> Vec<PostProcessProvider> {
             models_endpoint: Some("/models".to_string()),
             supports_structured_output: true,
         },
-        // Google Gemini via its OpenAI-compatible surface. Base URL has NO
-        // trailing `/v1` — the app appends `/chat/completions` and `/models`.
-        PostProcessProvider {
-            id: "gemini".to_string(),
-            label: "Google Gemini".to_string(),
-            base_url: "https://generativelanguage.googleapis.com/v1beta/openai".to_string(),
-            allow_base_url_edit: false,
-            models_endpoint: Some("/models".to_string()),
-            supports_structured_output: true,
-        },
         PostProcessProvider {
             id: "xai".to_string(),
             label: "xAI (Grok)".to_string(),
@@ -2439,7 +2429,7 @@ pub const CLOUD_STT_ELEVENLABS: &str = "elevenlabs";
 pub const CLOUD_STT_AZURE: &str = "azure";
 
 pub fn default_cloud_stt_provider_id() -> String {
-    "gemini".to_string()
+    "groq".to_string()
 }
 
 fn default_cloud_stt_timeout_secs() -> u64 {
@@ -2640,28 +2630,6 @@ pub fn default_cloud_stt_providers() -> Vec<CloudSttProvider> {
                 "https://learn.microsoft.com/azure/ai-services/speech-service/mai-transcribe"
                     .to_string(),
         },
-        // Gemini transcription, Rambler-style: the audio is uploaded through
-        // the Files API and transcribed via POST /v1beta/interactions with
-        // `gemini-3.5-transcribe` (SMART, hi-Latn + en-IN for Roman Hinglish), then the upload is
-        // deleted. Gemini's OpenAI-compatible endpoint has no
-        // /audio/transcriptions (404s), so CloudSttKind::Gemini speaks this
-        // native protocol instead of the OpenAI multipart shape.
-        CloudSttProvider {
-            id: "gemini".to_string(),
-            label: "Gemini".to_string(),
-            base_url: "https://generativelanguage.googleapis.com/v1beta".to_string(),
-            allow_base_url_edit: false,
-            kind: CloudSttKind::Gemini,
-            default_model: "gemini-3.5-transcribe".to_string(),
-            models: vec!["gemini-3.5-transcribe".to_string()],
-            models_endpoint: None,
-            honors_keyterms: false,
-            supports_streaming: false,
-            // No /audio/translations route on the OpenAI-compatible endpoint.
-            supports_translation: false,
-            key_optional: false,
-            api_key_url: "https://aistudio.google.com/apikey".to_string(),
-        },
         // Custom always comes last, mirroring the post-processing provider list.
         CloudSttProvider {
             id: "custom".to_string(),
@@ -2765,6 +2733,29 @@ pub(crate) fn ensure_cloud_stt_defaults(settings: &mut AppSettings) -> bool {
         }
     }
 
+    // Awaz is Groq-first: migrate any previous gemini default or unconfigured elevenlabs to groq
+    if settings.cloud_stt_provider_id == "gemini" {
+        settings.cloud_stt_provider_id = "groq".to_string();
+        changed = true;
+    }
+    if settings.post_process_provider_id == "gemini" {
+        settings.post_process_provider_id = "groq".to_string();
+        changed = true;
+    }
+
+    // Filter out gemini from providers list so it doesn't show in UI
+    let initial_stt_len = settings.cloud_stt_providers.len();
+    settings.cloud_stt_providers.retain(|p| p.id != "gemini");
+    if settings.cloud_stt_providers.len() != initial_stt_len {
+        changed = true;
+    }
+
+    let initial_pp_len = settings.post_process_providers.len();
+    settings.post_process_providers.retain(|p| p.id != "gemini");
+    if settings.post_process_providers.len() != initial_pp_len {
+        changed = true;
+    }
+
     // A provider id from a future build (or a hand-edited store) must not leave
     // the app pointing at nothing.
     if !settings
@@ -2776,10 +2767,6 @@ pub(crate) fn ensure_cloud_stt_defaults(settings: &mut AppSettings) -> bool {
         changed = true;
     }
 
-    // Awaz is Gemini-first: an install that still points at the old elevenlabs
-    // default (from a build before gemini became the default) is moved to
-    // gemini — but only if the user never actually set up elevenlabs (no key
-    // saved). A real elevenlabs user keeps their choice.
     if settings.cloud_stt_provider_id == CLOUD_STT_ELEVENLABS
         && settings
             .cloud_stt_api_keys
@@ -2846,7 +2833,6 @@ impl PartialEq for CloudSttProvider {
 fn default_model_for_provider(provider_id: &str) -> String {
     match provider_id {
         "groq" => "openai/gpt-oss-20b".to_string(),
-        "gemini" => "gemini-3-flash-preview".to_string(),
         id if id == APPLE_INTELLIGENCE_PROVIDER_ID => {
             APPLE_INTELLIGENCE_DEFAULT_MODEL_ID.to_string()
         }

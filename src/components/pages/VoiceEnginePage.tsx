@@ -45,7 +45,9 @@ export const VoiceEnginePage: React.FC = () => {
   const [allProviders, setAllProviders] = useState<CloudSttProvider[]>([]);
   const [keyStatus, setKeyStatus] = useState<Record<string, boolean>>({});
   const [userAddedProviders, setUserAddedProviders] = useState<string[]>([]);
-  const [testStatuses, setTestStatuses] = useState<Record<string, ProviderTestStatus>>({});
+  const [testStatuses, setTestStatuses] = useState<
+    Record<string, ProviderTestStatus>
+  >({});
   const [isTestingAll, setIsTestingAll] = useState(false);
 
   // Per-card key & model draft states
@@ -141,7 +143,11 @@ export const VoiceEnginePage: React.FC = () => {
     setSavingKey((prev) => ({ ...prev, [providerId]: true }));
     try {
       await commands.setCloudSttApiKey(providerId, key);
-      toast.success(t("settings.dictation.cloud.keySaved", { defaultValue: "API key saved" }));
+      toast.success(
+        t("settings.dictation.cloud.keySaved", {
+          defaultValue: "API key saved",
+        }),
+      );
       setKeyDrafts((prev) => ({ ...prev, [providerId]: "" }));
       await loadProvidersAndKeys();
     } catch (err) {
@@ -156,7 +162,11 @@ export const VoiceEnginePage: React.FC = () => {
     if (!model) return;
     try {
       await commands.setCloudSttModel(providerId, model);
-      toast.success(t("settings.dictation.cloud.modelSaved", { defaultValue: "Model saved" }));
+      toast.success(
+        t("settings.dictation.cloud.modelSaved", {
+          defaultValue: "Model saved",
+        }),
+      );
     } catch (err) {
       toast.error(String(err));
     }
@@ -166,7 +176,11 @@ export const VoiceEnginePage: React.FC = () => {
     try {
       await commands.setCloudSttProvider(providerId);
       await updateSetting("cloud_stt_provider_id", providerId);
-      toast.success(t("settings.dictation.cloud.providerUpdated", { defaultValue: "Active provider selected" }));
+      toast.success(
+        t("settings.dictation.cloud.providerUpdated", {
+          defaultValue: "Active provider selected",
+        }),
+      );
     } catch (err) {
       toast.error(String(err));
     }
@@ -182,7 +196,9 @@ export const VoiceEnginePage: React.FC = () => {
       if (newModel.trim()) {
         await commands.setCloudSttModel(newProviderKind, newModel.trim());
       }
-      setUserAddedProviders((prev) => Array.from(new Set([...prev, newProviderKind])));
+      setUserAddedProviders((prev) =>
+        Array.from(new Set([...prev, newProviderKind])),
+      );
       await loadProvidersAndKeys();
       setIsAddModalOpen(false);
       setNewApiKey("");
@@ -220,7 +236,8 @@ export const VoiceEnginePage: React.FC = () => {
     setIsPlayingAudio(true);
     // Synthetic audio beep / tone generation via Web Audio API
     try {
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const audioCtx = new (window.AudioContext ||
+        (window as any).webkitAudioContext)();
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
       osc.type = "sine";
@@ -264,14 +281,17 @@ export const VoiceEnginePage: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Cpu className="h-4 w-4 text-accent" />
-                  <span className="font-semibold text-sm text-ink">Local mode</span>
+                  <span className="font-semibold text-sm text-ink">
+                    Local mode
+                  </span>
                 </div>
                 {engineMode === "local" && (
                   <Badge variant="active">Active</Badge>
                 )}
               </div>
               <p className="mt-2 text-xs text-muted leading-relaxed">
-                Process entirely on your device with local speech models. Fast, private, offline.
+                Process entirely on your device with local speech models. Fast,
+                private, offline.
               </p>
             </button>
 
@@ -288,14 +308,17 @@ export const VoiceEnginePage: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Cloud className="h-4 w-4 text-accent" />
-                  <span className="font-semibold text-sm text-ink">Cloud API mode</span>
+                  <span className="font-semibold text-sm text-ink">
+                    Cloud API mode
+                  </span>
                 </div>
                 {engineMode === "cloud" && (
                   <Badge variant="active">Active</Badge>
                 )}
               </div>
               <p className="mt-2 text-xs text-muted leading-relaxed">
-                Use high-accuracy cloud transcription APIs like Groq Whisper. Fast, accurate, multilingual.
+                Use high-accuracy cloud transcription APIs like Groq Whisper.
+                Fast, accurate, multilingual.
               </p>
             </button>
 
@@ -304,12 +327,15 @@ export const VoiceEnginePage: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Server className="h-4 w-4 text-muted" />
-                  <span className="font-semibold text-sm text-muted">Server mode</span>
+                  <span className="font-semibold text-sm text-muted">
+                    Server mode
+                  </span>
                 </div>
                 <Badge variant="secondary">Planned</Badge>
               </div>
               <p className="mt-2 text-xs text-muted leading-relaxed">
-                Connect to a private self-hosted transcription server. (Planned / Disabled in 0.0.3)
+                Connect to a private self-hosted transcription server. (Planned
+                / Disabled in 0.0.3)
               </p>
             </div>
           </div>
@@ -323,7 +349,8 @@ export const VoiceEnginePage: React.FC = () => {
                 Speech recognition (ASR)
               </h3>
               <p className="text-xs text-muted">
-                Configured speech-to-text engines. Only configured providers are shown.
+                Configured speech-to-text engines. Only configured providers are
+                shown.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -347,8 +374,7 @@ export const VoiceEnginePage: React.FC = () => {
                 size="sm"
                 onClick={() => setIsAddModalOpen(true)}
               >
-                <Plus className="mr-1 h-3.5 w-3.5" />
-                + New
+                <Plus className="mr-1 h-3.5 w-3.5" />+ New
               </Button>
             </div>
           </div>
@@ -359,7 +385,9 @@ export const VoiceEnginePage: React.FC = () => {
             <div className="space-y-3">
               {configuredProviders.map((provider) => {
                 const isActive = provider.id === activeProviderId;
-                const testStatus = testStatuses[provider.id] || { state: "idle" };
+                const testStatus = testStatuses[provider.id] || {
+                  state: "idle",
+                };
                 const hasKey = keyStatus[provider.id];
                 const modelValue =
                   modelDrafts[provider.id] ??
@@ -387,9 +415,7 @@ export const VoiceEnginePage: React.FC = () => {
                               {provider.label}
                             </span>
                             {isActive && (
-                              <Badge variant="active">
-                                Selected
-                              </Badge>
+                              <Badge variant="active">Selected</Badge>
                             )}
                             {/* Latency badge or Error badge */}
                             {testStatus.state === "testing" && (
@@ -398,15 +424,14 @@ export const VoiceEnginePage: React.FC = () => {
                                 testing...
                               </Badge>
                             )}
-                            {testStatus.state === "ok" && testStatus.latency !== undefined && (
-                              <Badge variant="success">
-                                {testStatus.latency}ms
-                              </Badge>
-                            )}
+                            {testStatus.state === "ok" &&
+                              testStatus.latency !== undefined && (
+                                <Badge variant="success">
+                                  {testStatus.latency}ms
+                                </Badge>
+                              )}
                             {testStatus.state === "error" && (
-                              <Badge variant="error">
-                                Not working
-                              </Badge>
+                              <Badge variant="error">Not working</Badge>
                             )}
                           </div>
                           <span className="text-xs text-muted font-mono">
@@ -428,7 +453,9 @@ export const VoiceEnginePage: React.FC = () => {
                           <Button
                             variant="secondary"
                             size="sm"
-                            onClick={() => void handleSelectProvider(provider.id)}
+                            onClick={() =>
+                              void handleSelectProvider(provider.id)
+                            }
                           >
                             Select
                           </Button>
@@ -550,8 +577,14 @@ export const VoiceEnginePage: React.FC = () => {
                     {/* Shared Language and Translation options on active provider card */}
                     {isActive && (
                       <div className="mt-4 pt-3 border-t border-hairline/60 grid grid-cols-1 gap-4 md:grid-cols-2">
-                        <LanguageSelector descriptionMode="inline" grouped={false} />
-                        <TranslateToEnglish descriptionMode="inline" grouped={false} />
+                        <LanguageSelector
+                          descriptionMode="inline"
+                          grouped={false}
+                        />
+                        <TranslateToEnglish
+                          descriptionMode="inline"
+                          grouped={false}
+                        />
                       </div>
                     )}
                   </div>
@@ -560,7 +593,8 @@ export const VoiceEnginePage: React.FC = () => {
 
               {configuredProviders.length === 0 && (
                 <div className="rounded-xl border border-hairline bg-surface p-6 text-center text-sm text-muted">
-                  No configured voice engines. Click "+ New" to add Groq Whisper or custom ASR.
+                  No configured voice engines. Click "+ New" to add Groq Whisper
+                  or custom ASR.
                 </div>
               )}
             </div>
@@ -571,9 +605,12 @@ export const VoiceEnginePage: React.FC = () => {
         <section className="space-y-3 rounded-2xl border border-hairline bg-surface p-5">
           <div className="flex items-center justify-between border-b border-hairline pb-3">
             <div>
-              <h3 className="font-semibold text-sm text-ink">Recognition test</h3>
+              <h3 className="font-semibold text-sm text-ink">
+                Recognition test
+              </h3>
               <p className="text-xs text-muted mt-0.5">
-                Verify your voice engine with a test recording or built-in audio sample.
+                Verify your voice engine with a test recording or built-in audio
+                sample.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -619,7 +656,9 @@ export const VoiceEnginePage: React.FC = () => {
                   {sampleTestResult.latencyMs}ms
                 </span>
               </div>
-              <p className="font-mono text-ink mt-1">"{sampleTestResult.text}"</p>
+              <p className="font-mono text-ink mt-1">
+                "{sampleTestResult.text}"
+              </p>
             </div>
           )}
 
@@ -627,7 +666,9 @@ export const VoiceEnginePage: React.FC = () => {
             <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3.5 text-xs text-red-300 flex items-start gap-2">
               <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
               <div>
-                <span className="font-semibold block">Recognition Test Failed</span>
+                <span className="font-semibold block">
+                  Recognition Test Failed
+                </span>
                 <span className="text-red-200/90">{sampleTestError}</span>
               </div>
             </div>
@@ -643,12 +684,15 @@ export const VoiceEnginePage: React.FC = () => {
               Add Speech Recognition (ASR) Provider
             </h3>
             <p className="text-xs text-muted">
-              Choose an ASR provider and provide its credentials. Gemini is strictly removed.
+              Choose an ASR provider and provide its credentials. Gemini is
+              strictly removed.
             </p>
 
             <div className="space-y-3">
               <div className="space-y-1">
-                <label className="text-xs font-medium text-ink">Provider Type</label>
+                <label className="text-xs font-medium text-ink">
+                  Provider Type
+                </label>
                 <select
                   value={newProviderKind}
                   onChange={(e) => {
