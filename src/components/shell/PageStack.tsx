@@ -7,6 +7,8 @@ import { MeetingsPage } from "@/components/pages/MeetingsPage";
 import { CleanupPage } from "@/components/pages/CleanupPage";
 import { DictionaryPage } from "@/components/pages/DictionaryPage";
 import { ModelsPage } from "@/components/pages/ModelsPage";
+import { VoiceEnginePage } from "@/components/pages/VoiceEnginePage";
+import { AiProvidersPage } from "@/components/pages/AiProvidersPage";
 import { PortalTargetProvider } from "@/components/ui/portal";
 import { Freeze } from "./Freeze";
 import { useNavigation, type PageId } from "./navigation";
@@ -20,6 +22,8 @@ const PAGES: Record<PageId, React.ComponentType> = {
   cleanup: CleanupPage,
   dictionary: DictionaryPage,
   models: ModelsPage,
+  "voice-engine": VoiceEnginePage,
+  "ai-providers": AiProvidersPage,
 };
 
 /**

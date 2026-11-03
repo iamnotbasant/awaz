@@ -2483,6 +2483,8 @@
     "cleanup": "AI cleanup",
     "dictionary": "Dictionary",
     "models": "Models",
+    "voiceEngine": "Voice engine",
+    "aiProviders": "AI providers",
     "settings": "Settings",
     "status": {
       "label": "Speech model: {{model}}, {{status}}. Open speech-to-text settings.",

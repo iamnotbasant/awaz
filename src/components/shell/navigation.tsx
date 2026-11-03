@@ -31,7 +31,9 @@ export type PageId =
   | "meetings"
   | "cleanup"
   | "dictionary"
-  | "models";
+  | "models"
+  | "voice-engine"
+  | "ai-providers";
 
 /** The four jobs a model does in SpeakoFlow — one tab each on Models. */
 export type ModelSlot = "stt" | "cleanup" | "assistant" | "voice";
@@ -162,11 +164,17 @@ export const NavigationProvider: React.FC<{
 
   const openModelSlot = useCallback(
     (slot: ModelSlot) =>
-      setState((current) =>
-        current.page === "models"
+      setState((current) => {
+        if (slot === "stt") {
+          return pushed(current, { page: "voice-engine", modelSlot: slot });
+        }
+        if (slot === "cleanup") {
+          return pushed(current, { page: "ai-providers", modelSlot: slot });
+        }
+        return current.page === "models"
           ? { ...current, modelSlot: slot, settingsTab: null }
-          : pushed(current, { page: "models", modelSlot: slot }),
-      ),
+          : pushed(current, { page: "models", modelSlot: slot });
+      }),
     [setState],
   );
 

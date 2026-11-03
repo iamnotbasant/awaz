@@ -11,7 +11,9 @@ import {
   History,
   House,
   MessageCircle,
+  Mic,
   Settings,
+  Sparkles,
   Users,
   Wand2,
 } from "lucide-react";
@@ -53,10 +55,16 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "insights", labelKey: "nav.insights", icon: ChartColumn },
 ];
 
-const MODELS_ITEM: NavItem = {
-  id: "models",
-  labelKey: "nav.models",
-  icon: Cpu,
+const VOICE_ENGINE_ITEM: NavItem = {
+  id: "voice-engine",
+  labelKey: "nav.voiceEngine",
+  icon: Mic,
+};
+
+const AI_PROVIDERS_ITEM: NavItem = {
+  id: "ai-providers",
+  labelKey: "nav.aiProviders",
+  icon: Sparkles,
 };
 
 const NavButton: React.FC<{
@@ -185,10 +193,16 @@ export const Sidebar: React.FC = () => {
         ))}
         <div className="mx-2.5 my-2 h-px bg-hairline-strong/70" />
         <NavButton
-          item={MODELS_ITEM}
-          active={page === "models"}
+          item={VOICE_ENGINE_ITEM}
+          active={page === "voice-engine"}
           collapsed={collapsed}
-          onClick={() => navigateRoot("models")}
+          onClick={() => navigateRoot("voice-engine")}
+        />
+        <NavButton
+          item={AI_PROVIDERS_ITEM}
+          active={page === "ai-providers"}
+          collapsed={collapsed}
+          onClick={() => navigateRoot("ai-providers")}
         />
       </nav>
 
