@@ -108,6 +108,48 @@ fn request_timeout(base_secs: u64, audio_secs: f64) -> Duration {
     (base + extra).min(MAX_REQUEST_TIMEOUT.max(base))
 }
 
+/// Whether this cloud provider or model is a Whisper speech recognition engine.
+///
+/// Groq STT exclusively serves Whisper models (`whisper-large-v3-turbo`, `whisper-large-v3`).
+/// OpenAI and OpenAI-compatible providers can serve `whisper-1`, `whisper-large-v3`, etc.
+pub(crate) fn is_whisper_stt(provider_id: &str, provider_kind: CloudSttKind, model: &str) -> bool {
+    provider_id == "groq"
+        || model.to_ascii_lowercase().contains("whisper")
+        || (provider_kind == CloudSttKind::OpenAiCompatible
+            && (model.to_ascii_lowercase().contains("whisper") || provider_id == "groq"))
+}
+
+/// Resolve parameters for OpenAI-compatible multipart audio transcription requests.
+///
+/// In Awaz, Groq and Whisper requests MUST force `language: "hi"` on `/audio/transcriptions`.
+pub(crate) fn openai_stt_request_params(
+    provider_id: &str,
+    model: &str,
+    configured_language: Option<&str>,
+    translate: bool,
+    keyterms: &[String],
+) -> (String, Option<String>, Option<String>) {
+    let is_whisper = is_whisper_stt(provider_id, CloudSttKind::OpenAiCompatible, model);
+    let path = if translate && !is_whisper {
+        "/audio/translations".to_string()
+    } else {
+        "/audio/transcriptions".to_string()
+    };
+    let language = if is_whisper {
+        Some("hi".to_string())
+    } else if translate {
+        None
+    } else {
+        configured_language.map(|s| s.to_string())
+    };
+    let prompt = if !keyterms.is_empty() {
+        Some(keyterms.join(", "))
+    } else {
+        None
+    };
+    (path, language, prompt)
+}
+
 /// Resolve the active cloud transcription configuration, or explain why it
 /// cannot run. Returns `Err` with [`CloudSttUnavailableReason::NotEnabled`] when
 /// the user is on the local engine, so callers can treat "not configured" and
@@ -1309,53 +1351,6 @@ impl CloudRequest {
     /// `language` field — sending one would be describing a target it does not
     /// have. The spoken-language hint is dropped for exactly that reason:
     /// Whisper's translate task detects the source itself.
-    /// Whether this cloud provider or model is a Whisper speech recognition engine.
-    ///
-    /// Groq STT exclusively serves Whisper models (`whisper-large-v3-turbo`, `whisper-large-v3`).
-    /// OpenAI and OpenAI-compatible providers can serve `whisper-1`, `whisper-large-v3`, etc.
-    pub(crate) fn is_whisper_stt(
-        provider_id: &str,
-        provider_kind: CloudSttKind,
-        model: &str,
-    ) -> bool {
-        provider_id == "groq"
-            || model.to_ascii_lowercase().contains("whisper")
-            || (provider_kind == CloudSttKind::OpenAiCompatible
-                && (model.to_ascii_lowercase().contains("whisper") || provider_id == "groq"))
-    }
-
-    /// Resolve parameters for OpenAI-compatible multipart audio transcription requests.
-    ///
-    /// In Awaz, Groq and Whisper requests MUST force `language: "hi"` on `/audio/transcriptions`.
-    pub(crate) fn openai_stt_request_params(
-        provider_id: &str,
-        model: &str,
-        configured_language: Option<&str>,
-        translate: bool,
-        keyterms: &[String],
-    ) -> (String, Option<String>, Option<String>) {
-        let is_whisper = is_whisper_stt(provider_id, CloudSttKind::OpenAiCompatible, model);
-        let path = if translate && !is_whisper {
-            "/audio/translations".to_string()
-        } else {
-            "/audio/transcriptions".to_string()
-        };
-        let language = if is_whisper {
-            Some("hi".to_string())
-        } else if translate {
-            None
-        } else {
-            configured_language.map(|s| s.to_string())
-        };
-        let prompt = if !keyterms.is_empty() {
-            Some(keyterms.join(", "))
-        } else {
-            None
-        };
-        (path, language, prompt)
-    }
-
-    /// rambler-style audio transcription via an OpenAI-compatible endpoint.
     ///
     /// Groq and Whisper models always carry `language: "hi"` to guarantee
     /// Hindi/Hinglish decoding and avoid Icelandic misdetection (Awaz D35).
