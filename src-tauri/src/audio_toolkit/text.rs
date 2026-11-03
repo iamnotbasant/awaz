@@ -575,7 +575,7 @@ pub fn devanagari_to_roman(text: &str) -> String {
             'ऐ' => Some("ai"),
             'ओ' => Some("o"),
             'औ' => Some("au"),
-            'अं' | 'ं' | 'ँ' => Some("n"),
+            'ं' | 'ँ' => Some("n"),
             'ः' => Some("h"),
             _ => None,
         };
@@ -608,8 +608,30 @@ pub fn devanagari_to_roman(text: &str) -> String {
             continue;
         }
 
-        // Consonants
+        // Nukta combining mark (standalone or already consumed)
+        if c == '\u{093C}' {
+            i += 1;
+            continue;
+        }
+
+        // Consonants (including nukta combinations)
+        let is_nukta = next_c == Some('\u{093C}');
         let consonant = match c {
+            'क' if is_nukta => Some("q"),
+            'ख' if is_nukta => Some("kh"),
+            'ग' if is_nukta => Some("gh"),
+            'ज' if is_nukta => Some("z"),
+            'ड' if is_nukta => Some("d"),
+            'ढ' if is_nukta => Some("dh"),
+            'फ' if is_nukta => Some("f"),
+            '\u{0958}' => Some("q"),
+            '\u{0959}' => Some("kh"),
+            '\u{095A}' => Some("gh"),
+            '\u{095B}' => Some("z"),
+            '\u{095C}' => Some("d"),
+            '\u{095D}' => Some("dh"),
+            '\u{095E}' => Some("f"),
+            '\u{095F}' => Some("y"),
             'क' => Some("k"),
             'ख' => Some("kh"),
             'ग' => Some("g"),
@@ -643,24 +665,23 @@ pub fn devanagari_to_roman(text: &str) -> String {
             'ष' => Some("sh"),
             'स' => Some("s"),
             'ह' => Some("h"),
-            'ड़' => Some("d"),
-            'ढ़' => Some("dh"),
-            'ज़' => Some("z"),
-            'फ़' => Some("f"),
-            'क़' => Some("q"),
-            'ख़' => Some("kh"),
-            'ग़' => Some("gh"),
             _ => None,
         };
 
         if let Some(cons) = consonant {
             result.push_str(cons);
-            let has_following_matra_or_virama = match next_c {
+            let next_after_cons = if is_nukta {
+                chars.get(i + 2).copied()
+            } else {
+                next_c
+            };
+
+            let has_following_matra_or_virama = match next_after_cons {
                 Some('ा' | 'ि' | 'ी' | 'ु' | 'ू' | 'ृ' | 'े' | 'ै' | 'ो' | 'ौ' | '्') => true,
                 _ => false,
             };
             if !has_following_matra_or_virama {
-                let is_end_of_word = match next_c {
+                let is_end_of_word = match next_after_cons {
                     None => true,
                     Some(ch) if ch.is_whitespace() || ch.is_ascii_punctuation() || ch == '।' => true,
                     _ => false,
@@ -669,7 +690,10 @@ pub fn devanagari_to_roman(text: &str) -> String {
                     result.push('a');
                 }
             }
-            if next_c == Some('्') {
+            if is_nukta {
+                i += 1;
+            }
+            if next_after_cons == Some('्') {
                 i += 1;
             }
             i += 1;
