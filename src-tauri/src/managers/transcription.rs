@@ -1160,7 +1160,8 @@ impl TranscriptionManager {
                 let rs_result: transcribe_rs::TranscriptionResult = match &mut engine {
                     LoadedEngine::Whisper(whisper_engine) => {
                         let whisper_language = if validated_language == "auto" {
-                            None
+                            // Awaz 0.0.3 / D35: Force language 'hi' for Whisper paths
+                            Some("hi".to_string())
                         } else {
                             let normalized = if validated_language == "zh-Hans"
                                 || validated_language == "zh-Hant"
@@ -2405,9 +2406,14 @@ pub fn transcribe_cpp_run_plan(
         other => other,
     };
 
-    // Language hint only when the model actually advertises it; else autodetect.
+    // Language hint: for Whisper models under Awaz, auto defaults to "hi" to prevent
+    // misdetection into Icelandic or other foreign languages (Awaz D35).
     let language = if selected == "auto" {
-        None
+        if arch.to_ascii_lowercase().contains("whisper") {
+            Some("hi".to_string())
+        } else {
+            None
+        }
     } else if caps
         .languages
         .iter()

@@ -184,7 +184,15 @@ pub(crate) fn resolve_cloud_stt(
         base_url
     };
 
-    let language = cloud_language_code(&settings.selected_language);
+    // Awaz 0.0.3 / D35: Force language 'hi' on every Groq/OpenAI-shape Whisper
+    // audio-transcription request. Unconstrained auto-detect on Hinglish speech
+    // causes Whisper to misdetect into Icelandic/Welsh/etc. gibberish.
+    let is_whisper = is_whisper_stt(&provider.id, provider.kind, &model);
+    let language = if is_whisper {
+        Some("hi".to_string())
+    } else {
+        cloud_language_code(&settings.selected_language)
+    };
 
     // "Translate to English" is one switch shared with the local engine, where it
     // maps onto Whisper's translate task. On the cloud side only the OpenAI
@@ -1301,33 +1309,75 @@ impl CloudRequest {
     /// `language` field — sending one would be describing a target it does not
     /// have. The spoken-language hint is dropped for exactly that reason:
     /// Whisper's translate task detects the source itself.
-    async fn transcribe_openai(&self, audio: AudioUpload) -> Result<String, String> {
-        let path = if self.translate {
-            "/audio/translations"
+    /// Whether this cloud provider or model is a Whisper speech recognition engine.
+    ///
+    /// Groq STT exclusively serves Whisper models (`whisper-large-v3-turbo`, `whisper-large-v3`).
+    /// OpenAI and OpenAI-compatible providers can serve `whisper-1`, `whisper-large-v3`, etc.
+    pub(crate) fn is_whisper_stt(
+        provider_id: &str,
+        provider_kind: CloudSttKind,
+        model: &str,
+    ) -> bool {
+        provider_id == "groq"
+            || model.to_ascii_lowercase().contains("whisper")
+            || (provider_kind == CloudSttKind::OpenAiCompatible
+                && (model.to_ascii_lowercase().contains("whisper") || provider_id == "groq"))
+    }
+
+    /// Resolve parameters for OpenAI-compatible multipart audio transcription requests.
+    ///
+    /// In Awaz, Groq and Whisper requests MUST force `language: "hi"` on `/audio/transcriptions`.
+    pub(crate) fn openai_stt_request_params(
+        provider_id: &str,
+        model: &str,
+        configured_language: Option<&str>,
+        translate: bool,
+        keyterms: &[String],
+    ) -> (String, Option<String>, Option<String>) {
+        let is_whisper = is_whisper_stt(provider_id, CloudSttKind::OpenAiCompatible, model);
+        let path = if translate && !is_whisper {
+            "/audio/translations".to_string()
         } else {
-            "/audio/transcriptions"
+            "/audio/transcriptions".to_string()
         };
+        let language = if is_whisper {
+            Some("hi".to_string())
+        } else if translate {
+            None
+        } else {
+            configured_language.map(|s| s.to_string())
+        };
+        let prompt = if !keyterms.is_empty() {
+            Some(keyterms.join(", "))
+        } else {
+            None
+        };
+        (path, language, prompt)
+    }
+
+    /// rambler-style audio transcription via an OpenAI-compatible endpoint.
+    ///
+    /// Groq and Whisper models always carry `language: "hi"` to guarantee
+    /// Hindi/Hinglish decoding and avoid Icelandic misdetection (Awaz D35).
+    async fn transcribe_openai(&self, audio: AudioUpload) -> Result<String, String> {
+        let (path, effective_language, prompt) = openai_stt_request_params(
+            &self.provider_id,
+            &self.model,
+            self.language.as_deref(),
+            self.translate,
+            &self.keyterms,
+        );
         let url = format!("{}{}", self.base_url, path);
         let part = audio_part(audio)?;
         let mut form = reqwest::multipart::Form::new()
             .text("model", self.model.clone())
             .text("response_format", "json")
             .part("file", part);
-        if let Some(language) = &self.language {
-            if self.translate {
-                debug!(
-                    "Cloud transcription: translating to English, so the {language} \
-                     source hint is not sent"
-                );
-            } else {
-                // This schema wants a bare ISO-639-1 code.
-                form = form.text("language", language.clone());
-            }
+        if let Some(language) = effective_language {
+            form = form.text("language", language);
         }
-        if !self.keyterms.is_empty() {
-            // No keyterm field here; the documented way to bias this family is
-            // the free-text prompt, which is read as context for the audio.
-            form = form.text("prompt", self.keyterms.join(", "));
+        if let Some(prompt) = prompt {
+            form = form.text("prompt", prompt);
         }
 
         let mut request = self.post(&url)?.multipart(form);
@@ -2071,6 +2121,47 @@ mod tests {
         assert_eq!(cfg.model, "whisper-large-v3-turbo");
         assert_eq!(cfg.base_url, "https://api.groq.com/openai/v1");
         assert_eq!(cfg.api_key, "test-groq-key");
+        assert_eq!(cfg.language.as_deref(), Some("hi"));
+    }
+
+    #[test]
+    fn groq_whisper_forces_language_hi_and_openai_shape_lock() {
+        let mut settings = get_default_settings();
+        settings.stt_engine_mode = SttEngineMode::Cloud;
+        settings.cloud_stt_provider_id = "groq".to_string();
+        settings
+            .cloud_stt_api_keys
+            .insert("groq".to_string(), "test-groq-key".to_string());
+
+        // Default setting has selected_language = "auto"
+        let cfg = resolve_cloud_stt(&settings).expect("groq should resolve");
+        assert_eq!(cfg.model, "whisper-large-v3-turbo");
+        // Must carry forced language "hi" (Awaz 0.0.3 D35)
+        assert_eq!(cfg.language.as_deref(), Some("hi"));
+
+        // Verify request parameters helper also locks language to "hi"
+        let (path, lang, prompt) =
+            openai_stt_request_params("groq", "whisper-large-v3-turbo", None, false, &[]);
+        assert_eq!(path, "/audio/transcriptions");
+        assert_eq!(lang.as_deref(), Some("hi"));
+        assert!(prompt.is_none());
+
+        // Verify OpenAI with whisper-1 also carries "hi"
+        let (path_oai, lang_oai, _) =
+            openai_stt_request_params("openai", "whisper-1", None, false, &[]);
+        assert_eq!(path_oai, "/audio/transcriptions");
+        assert_eq!(lang_oai.as_deref(), Some("hi"));
+
+        // Verify custom OpenAI-compatible endpoint with whisper also carries "hi"
+        let (path_cust, lang_cust, _) = openai_stt_request_params(
+            "custom_endpoint",
+            "openai/whisper-large-v3",
+            None,
+            false,
+            &[],
+        );
+        assert_eq!(path_cust, "/audio/transcriptions");
+        assert_eq!(lang_cust.as_deref(), Some("hi"));
     }
 
     #[test]

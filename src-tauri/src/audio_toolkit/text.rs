@@ -453,6 +453,91 @@ pub fn detect_filler_language(text: &str) -> Option<&'static str> {
     (hits >= 2 && hits > runner_up && share >= 0.15).then_some(lang)
 }
 
+/// Check whether `text` contains recognizable Hindi or English content.
+///
+/// In Awaz (a Hinglish voice assistant), valid transcription output is either:
+/// 1. Hindi written in Devanagari script (e.g. from Whisper STT when forced to Hindi:
+///    `\u{0900}..\u{097F}` or `\u{A8E0}..\u{A8FF}`).
+/// 2. English words or Roman Hinglish written in Latin script (e.g. from Gemini STT or
+///    post-processed Hinglish Roman cleanup).
+///
+/// When an unconstrained speech model misclassifies Hinglish speech, it often decodes into
+/// unexpected foreign languages (e.g. Icelandic "Heið list verna hvað stúrð seginn þau þær aðra fór sinni",
+/// Cyrillic, CJK, etc.). This guard detects such foreign gibberish so Awaz can surface a clear
+/// "language not recognised, retry" state instead of pasting nonsense into the user's document (D9).
+pub fn is_hindi_or_english_content(text: &str) -> bool {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+
+    // 1. Devanagari script (Hindi/Sanskrit/Marathi/etc.):
+    // Any presence of Devanagari indicates Hindi speech.
+    let has_devanagari = trimmed
+        .chars()
+        .any(|c| ('\u{0900}'..='\u{097F}').contains(&c) || ('\u{A8E0}'..='\u{A8FF}').contains(&c));
+    if has_devanagari {
+        return true;
+    }
+
+    // 2. Reject foreign scripts (non-Devanagari, non-Latin alphabets):
+    let has_foreign_script = trimmed.chars().any(|c| {
+        // Cyrillic (Russian, Ukrainian, etc.)
+        ('\u{0400}'..='\u{04FF}').contains(&c)
+            // Arabic / Perso-Arabic
+            || ('\u{0600}'..='\u{06FF}').contains(&c)
+            // CJK Ideographs / Kana / Hangul
+            || ('\u{4E00}'..='\u{9FFF}').contains(&c)
+            || ('\u{3040}'..='\u{30FF}').contains(&c)
+            || ('\u{AC00}'..='\u{D7AF}').contains(&c)
+            // Greek
+            || ('\u{0370}'..='\u{03FF}').contains(&c)
+            // Hebrew
+            || ('\u{0590}'..='\u{05FF}').contains(&c)
+            // Thai
+            || ('\u{0E00}'..='\u{0E7F}').contains(&c)
+    });
+    if has_foreign_script {
+        return false;
+    }
+
+    // 3. Reject non-English Latin letters typical of Scandinavian/German/Slavic/Turkish
+    // misclassifications (specifically Icelandic eth, thorn, ae, etc.):
+    let has_foreign_latin_chars = trimmed.chars().any(|c| {
+        matches!(
+            c,
+            // Icelandic / Old Norse
+            'ð' | 'Ð' | 'þ' | 'Þ' | 'æ' | 'Æ' |
+            // Nordic / Danish / Norwegian
+            'ø' | 'Ø' | 'å' | 'Å' |
+            // German eszett
+            'ß' |
+            // Polish / Slavic
+            'ł' | 'Ł' |
+            // Turkish
+            'ğ' | 'Ğ' | 'ş' | 'Ş' | 'ı'
+        )
+    });
+    if has_foreign_latin_chars {
+        return false;
+    }
+
+    // 4. Reject foreign languages identified by known function words (German, French, etc.)
+    if let Some(foreign_lang) = detect_filler_language(trimmed) {
+        if foreign_lang != "en" {
+            return false;
+        }
+    }
+
+    // 5. Must contain at least one ASCII alphabetic letter (a-zA-Z)
+    let has_ascii_letters = trimmed.chars().any(|c| c.is_ascii_alphabetic());
+    if !has_ascii_letters {
+        return false;
+    }
+
+    true
+}
+
 static MULTI_SPACE_PATTERN: Lazy<Regex> = Lazy::new(|| Regex::new(r"\s{2,}").unwrap());
 
 /// Two commas left adjacent by a deletion between them ("just, uh, fixing").
@@ -1160,5 +1245,72 @@ mod tests {
             detect_filler_language("ich glaube das ist nicht so einfach"),
             Some("de")
         );
+    }
+
+    #[test]
+    fn test_is_hindi_or_english_content_guard_triggers_on_nonsense() {
+        // User symptom (Nov 2 2026 bug): Whisper unconstrained auto-detect misclassifies Hinglish into Icelandic
+        let icelandic_gibberish = "Heið list verna hvað stúrð seginn þau þær aðra fór sinni";
+        assert!(
+            !is_hindi_or_english_content(icelandic_gibberish),
+            "Icelandic output must trigger nonsense guard"
+        );
+
+        // Cyrillic nonsense
+        assert!(!is_hindi_or_english_content("Привет как дела"));
+
+        // CJK nonsense
+        assert!(!is_hindi_or_english_content("你好世界"));
+
+        // Arabic nonsense
+        assert!(!is_hindi_or_english_content("مرحبا كيف حالك"));
+
+        // German sentences without Hindi/English context
+        assert!(!is_hindi_or_english_content("Guten Morgen wie geht es dir"));
+
+        // French sentences without Hindi/English context
+        assert!(!is_hindi_or_english_content(
+            "Bonjour tout le monde comment allez vous"
+        ));
+
+        // Empty / punctuation only
+        assert!(!is_hindi_or_english_content(""));
+        assert!(!is_hindi_or_english_content("   ... !? "));
+    }
+
+    #[test]
+    fn test_is_hindi_or_english_content_accepts_valid_hindi_and_english() {
+        // Devanagari Hindi (Whisper forced language 'hi' raw ASR output)
+        assert!(is_hindi_or_english_content("नमस्ते भाई, क्या हाल है?"));
+        assert!(is_hindi_or_english_content("यह एक टेस्ट है कल मीटिंग करेंगे"));
+
+        // Devanagari + English loanwords
+        assert!(is_hindi_or_english_content("आज का meeting 5 बजे है"));
+
+        // Roman Hinglish (Cleaned output from Prompt A)
+        assert!(is_hindi_or_english_content(
+            "Haan bhai kal milte hain 5 baje"
+        ));
+        assert!(is_hindi_or_english_content(
+            "Mera laptop restart ho gaya hai"
+        ));
+        assert!(is_hindi_or_english_content("Kal office aana hai kya?"));
+
+        // Standard English dictation
+        assert!(is_hindi_or_english_content(
+            "Hello, this is a test recording."
+        ));
+        assert!(is_hindi_or_english_content(
+            "Push commit and monitor CI to green"
+        ));
+
+        // Technical terms
+        assert!(is_hindi_or_english_content("whisper-large-v3-turbo"));
+        assert!(is_hindi_or_english_content("Docker Kubernetes API"));
+
+        // Short words
+        assert!(is_hindi_or_english_content("OK"));
+        assert!(is_hindi_or_english_content("Haan"));
+        assert!(is_hindi_or_english_content("Yes"));
     }
 }

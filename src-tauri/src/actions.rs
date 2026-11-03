@@ -3338,6 +3338,18 @@ async fn deliver_transcription(d: Dictation, transcription: String) {
         return;
     }
 
+    // Awaz 0.0.3 / D35: Language recognition guard.
+    // If output contains no Hindi/English content (e.g. unconstrained Whisper
+    // hallucinating Icelandic/Cyrillic gibberish), surface visible retry state and never paste.
+    if !crate::audio_toolkit::is_hindi_or_english_content(&transcription) {
+        warn!(
+            "Transcription rejected: language not recognised (no Hindi/English content found): '{}'",
+            crate::utils::redact_text(&transcription)
+        );
+        language_not_recognised(d, transcription);
+        return;
+    }
+
     // Rerouted to the assistant (the overlay's Ask-Assistant button): hand the
     // transcript to the assistant instead of pasting it anywhere. Awaz ships
     // with the assistant removed, so this path is dead — but if the flag ever
@@ -3497,6 +3509,22 @@ async fn deliver_transcription(d: Dictation, transcription: String) {
         .as_ref()
         .map(|r| r.elapsed_ms as i64);
 
+    let (cleanup_status, cleanup_error, final_paste_text) =
+        if !crate::audio_toolkit::is_hindi_or_english_content(&processed.final_text) {
+            warn!(
+            "Final text rejected: language not recognised (no Hindi/English content found): '{}'",
+            crate::utils::redact_text(&processed.final_text)
+        );
+            overlay_notice = Some("languageNotRecognised");
+            (
+                Some("language_unrecognised".to_string()),
+                Some("Language not recognised, retry".to_string()),
+                String::new(),
+            )
+        } else {
+            (cleanup_status, cleanup_error, processed.final_text)
+        };
+
     let row = d.history.write(
         &d.hm,
         EntryOutcome {
@@ -3516,7 +3544,10 @@ async fn deliver_transcription(d: Dictation, transcription: String) {
         },
     );
 
-    if processed.final_text.is_empty() {
+    if final_paste_text.is_empty() {
+        if let Some(notice) = overlay_notice {
+            utils::show_overlay_notice(&ah, notice);
+        }
         finish_idle(&ah);
         return;
     }
@@ -3527,7 +3558,7 @@ async fn deliver_transcription(d: Dictation, transcription: String) {
         d.context,
         d.flow_cancel_generation,
         PendingPaste {
-            text: processed.final_text,
+            text: final_paste_text,
             notice: overlay_notice,
             flow: false,
         },
@@ -3778,6 +3809,48 @@ fn transcription_failed(d: Dictation, samples: Option<Arc<Vec<f32>>>, err: &anyh
         Some(notice) => utils::show_overlay_notice(&d.app, notice),
         None => utils::hide_recording_overlay(&d.app),
     }
+}
+
+/// Output contained no Hindi/English content (e.g. Icelandic gibberish from misdetected Hinglish).
+/// Surface a visible "language not recognised, retry" state instead of pasting gibberish (D9).
+fn language_not_recognised(d: Dictation, transcription: String) {
+    let ah = d.app.clone();
+    let offers_recovery = d.offers_recovery();
+    let row = d.history.write(
+        &d.hm,
+        EntryOutcome {
+            transcription_text: transcription,
+            post_processed_text: None,
+            post_process_prompt: None,
+            post_process_requested: d.context.post_process,
+            dismissed: false,
+            stt_provider: d.stt_provider.clone(),
+            stt_model: d.stt_model.clone(),
+            stt_duration_ms: d.stt_duration_ms,
+            cleanup_provider: None,
+            cleanup_model: None,
+            cleanup_duration_ms: None,
+            cleanup_status: Some("language_unrecognised".to_string()),
+            cleanup_error: Some("Language not recognised, retry".to_string()),
+        },
+    );
+
+    change_tray_icon(&ah, TrayIconState::Idle);
+    let notice = "languageNotRecognised";
+
+    if offers_recovery {
+        let offer = Offer {
+            kind: OfferKind::Failed,
+            notice: Some(notice),
+            remaining: Remaining::Deliver(String::new()),
+            context: d.context,
+            row: RowHandle::ready(row),
+        };
+        if crate::dictation_recovery::present(&ah, offer) {
+            return;
+        }
+    }
+    utils::show_overlay_notice(&ah, notice);
 }
 
 // === Recovering a dictation ==============================================

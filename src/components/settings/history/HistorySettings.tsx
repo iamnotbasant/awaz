@@ -1424,7 +1424,18 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
       )}
 
       {/* eslint-disable i18next/no-literal-string */}
-      {entry.cleanup_error && (
+      {entry.cleanup_status === "language_unrecognised" ? (
+        <div
+          className="mt-2 flex items-center gap-1.5 rounded border border-rose-500/30 bg-rose-500/10 px-2.5 py-1.5 text-xs text-rose-600 dark:text-rose-400"
+          data-testid="language-unrecognised-banner"
+        >
+          <AlertCircle width={14} height={14} className="shrink-0" />
+          <span>
+            <strong>Language not recognised:</strong> Please retry speaking in
+            Hindi/English.
+          </span>
+        </div>
+      ) : entry.cleanup_error ? (
         <div className="mt-2 flex items-center gap-1.5 rounded border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-600 dark:text-amber-400">
           <AlertCircle width={14} height={14} className="shrink-0" />
           <span>
@@ -1432,7 +1443,7 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
             raw transcript)
           </span>
         </div>
-      )}
+      ) : null}
       {/* eslint-enable i18next/no-literal-string */}
 
       {audioSrc && (

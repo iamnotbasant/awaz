@@ -1,6 +1,6 @@
 [package]
 name = "awaz"
-version = "0.0.2"
+version = "0.0.3"
 description = "Awaz"
 authors = ["basant"]
 edition = "2021"
