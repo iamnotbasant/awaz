@@ -82,8 +82,20 @@ jobs:
                 Write-Host "Found NSIS installer: $($_.FullName)"
                 Copy-Item -Path $_.FullName -Destination artifacts\ -Force
               }
+              Get-ChildItem -Path "$dir\release\bundle\nsis\*.sig" -ErrorAction SilentlyContinue | ForEach-Object {
+                Write-Host "Found NSIS signature: $($_.FullName)"
+                Copy-Item -Path $_.FullName -Destination artifacts\ -Force
+              }
               Get-ChildItem -Path "$dir\release\bundle\msi\*.msi" -ErrorAction SilentlyContinue | ForEach-Object {
                 Write-Host "Found MSI installer: $($_.FullName)"
+                Copy-Item -Path $_.FullName -Destination artifacts\ -Force
+              }
+              Get-ChildItem -Path "$dir\release\bundle\msi\*.sig" -ErrorAction SilentlyContinue | ForEach-Object {
+                Write-Host "Found MSI signature: $($_.FullName)"
+                Copy-Item -Path $_.FullName -Destination artifacts\ -Force
+              }
+              Get-ChildItem -Path "$dir\release\bundle\updater\*" -ErrorAction SilentlyContinue | ForEach-Object {
+                Write-Host "Found updater bundle: $($_.FullName)"
                 Copy-Item -Path $_.FullName -Destination artifacts\ -Force
               }
               Get-ChildItem -Path "$dir\release\*.exe" -Exclude "*.pdb","*.d" -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "awaz*.exe" -or $_.Name -like "Awaz*.exe" } | ForEach-Object {
